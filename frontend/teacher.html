@@ -250,6 +250,13 @@ table.grid tbody tr:hover{background:#f7fafd}
   </div>
 
   <div id="tab-scores" class="hidden">
+    <div class="toolbar">
+      <div class="right">
+        <button class="btn" id="btnGoImportScore">导入成绩</button>
+        <button class="btn" id="btnBackup">导出数据备份</button>
+        <button class="btn primary" id="btnExportCsv">导出综测评分表</button>
+      </div>
+    </div>
     <div class="stats" id="stats">
       <div class="stat"><div class="num" id="stCount">0</div><div class="lab">学生人数</div></div>
       <div class="stat good"><div class="num" id="stAvg">–</div><div class="lab">平均综测分</div></div>
@@ -282,7 +289,7 @@ table.grid tbody tr:hover{background:#f7fafd}
 
   <div id="tab-classes" class="hidden">
     <div class="card">
-      <h2>导入学生（按教师号归属班级）</h2>
+      <h2 id="impTitle">导入学生 / 导入成绩（按教师号归属班级）</h2>
       <div class="imp-row">
         <span class="imp-lab">教师号</span>
         <input id="impTeacher" class="imp-input" placeholder="如 T001">
@@ -291,9 +298,17 @@ table.grid tbody tr:hover{background:#f7fafd}
         <span class="imp-lab">专业</span>
         <input id="impMajor" class="imp-input" placeholder="如 护理">
       </div>
-      <textarea id="impText" class="imp-text" placeholder="每行一条：学号,姓名[,专业]&#10;2023010109,赵一&#10;2023010110,钱二"></textarea>
+      <div class="imp-row">
+        <label class="imp-lab" style="display:flex;align-items:center;gap:6px">
+          <input type="checkbox" id="impUpdate"> 学号已存在时更新其姓名 / 专业 / 学业成绩
+        </label>
+        <span class="imp-lab" style="margin-left:auto">
+          <input type="file" id="impFile" accept=".csv,.txt,.json" style="font-size:12px"> 从文件读取
+        </span>
+      </div>
+      <textarea id="impText" class="imp-text" placeholder="每行一条，逗号或制表符分隔：&#10;新生导入：学号,姓名[,专业][,学业成绩]&#10;2023010109,赵一,护理,88&#10;成绩导入：学号,成绩&#10;2023010101,92.5"></textarea>
       <div class="imp-foot">
-        <span class="imp-tip">默认密码 123456；已存在的学号会自动跳过。仅能导入到本人教师号下的班级。</span>
+        <span class="imp-tip" id="impTip">导入的学号即为登录账号，初始密码统一 123456；学号支持 6~20 位。仅能导入到本人教师号下的班级。</span>
         <button class="btn primary" id="btnImport">开始导入</button>
       </div>
       <div class="imp-result hidden" id="impResult"></div>
@@ -759,18 +774,101 @@ document.getElementById('btnImport').addEventListener('click',async()=>{
   const cls=document.getElementById('impClass').value.trim();
   const csv=document.getElementById('impText').value;
   if(!cls){toast('请填写导入班级','err');return;}
-  if(!csv.trim()){toast('请粘贴学生名单','err');return;}
-  const r=await apiPost('/api/teacher/import',{teacher_account:teacher,class_name:cls,major:document.getElementById('impMajor').value.trim(),csv});
+  if(!csv.trim()){toast('请粘贴名单或成绩','err');return;}
+  const r=await apiPost('/api/teacher/import',{
+    teacher_account:teacher,
+    class_name:cls,
+    major:document.getElementById('impMajor').value.trim(),
+    update_existing:document.getElementById('impUpdate').checked,
+    csv
+  });
   const box=document.getElementById('impResult');
   box.classList.remove('hidden');
   if(r.code!==0){box.textContent='导入失败：'+r.msg;toast(r.msg,'err');return;}
   const d=r.data;
-  box.innerHTML=`导入完成：班级 <b>${esc(d.class_name)}</b>（辅导员 ${esc(d.teacher_account)}），新增 <b>${d.created.length}</b> 人，跳过 ${d.skipped.length} 人。`
+  const updated=d.updated||[];
+  box.innerHTML=`导入完成：班级 <b>${esc(d.class_name)}</b>（辅导员 ${esc(d.teacher_account)}），新增 <b>${d.created.length}</b> 人，更新 <b>${updated.length}</b> 人，跳过 ${d.skipped.length} 人。`
     +(d.skipped.length?`<br>跳过原因：${d.skipped.slice(0,5).map(s=>esc(s.xh)+'（'+esc(s.reason)+'）').join('、')}${d.skipped.length>5?' 等':''}`:'');
-  toast(`导入成功，新增 ${d.created.length} 人`,'ok');
+  toast(`导入成功：新增 ${d.created.length} 人，更新 ${updated.length} 人`,'ok');
   document.getElementById('impText').value='';
   loadMyClasses();loadStudents();
 });
+
+// 从文件读取名单 / 成绩
+document.getElementById('impFile').addEventListener('change',e=>{
+  const f=e.target.files[0];
+  if(!f)return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    // 兼容备份 JSON：还原成 学号,姓名,专业,成绩 文本
+    let text=String(reader.result||'');
+    if(/\.json$/i.test(f.name)){
+      try{
+        const arr=JSON.parse(text);
+        if(Array.isArray(arr)){
+          text=arr.map(s=>[s.xh,s.xm,s.zhuanye,s.zhuanye_score].join(',')).join('\n');
+          document.getElementById('impUpdate').checked=true;
+        }
+      }catch(err){toast('备份文件解析失败','err');return;}
+    }
+    document.getElementById('impText').value=text;
+    toast('已读取文件 '+f.name,'ok');
+  };
+  reader.readAsText(f,'utf-8');
+  e.target.value='';
+});
+
+// 「导入成绩」：切到班级管理并勾选更新模式
+document.getElementById('btnGoImportScore').addEventListener('click',()=>{
+  document.querySelector('#mainTabs .tabbtn[data-tab="classes"]').click();
+  document.getElementById('impUpdate').checked=true;
+  document.getElementById('impText').placeholder='每行一条：学号,成绩\n2023010101,92.5\n2023010102,88';
+  document.getElementById('impText').focus();
+  toast('粘贴「学号,成绩」后点击开始导入','ok');
+});
+
+/* ---------- 导出 ---------- */
+function downloadFile(name,content,mime){
+  const blob=new Blob([content],{type:mime});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=name;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},0);
+}
+function stamp(){const d=new Date();const p=n=>String(n).padStart(2,'0');return d.getFullYear()+p(d.getMonth()+1)+p(d.getDate());}
+
+document.getElementById('btnExportCsv').addEventListener('click',()=>{
+  if(!studentsData.length){toast('暂无学生数据','err');return;}
+  const head=['排名','学号','姓名','班级','专业','德育(20%)','智育(50%)','体育(10%)','美育(10%)','劳育(10%)','扣分','综测总分'];
+  const rows=studentsData.map(s=>[
+    s.rank,s.xh,s.xm,s.bj||'',s.zhuanye||'',
+    s.deyuScore.toFixed(2),s.zhiyuScore.toFixed(2),s.tiyuScore.toFixed(2),
+    s.meiyuScore.toFixed(2),s.laoyuScore.toFixed(2),s.koufenScore.toFixed(2),s.zongceScore.toFixed(2)
+  ]);
+  const csv=[head].concat(rows).map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\r\n');
+  // 加 BOM，Excel 打开中文不乱码
+  downloadFile('综测评分表_'+stamp()+'.csv','\ufeff'+csv,'text/csv;charset=utf-8');
+  toast('已导出综测评分表','ok');
+});
+
+document.getElementById('btnBackup').addEventListener('click',()=>{
+  if(!studentsData.length){toast('暂无学生数据','err');return;}
+  const data=studentsData.map(s=>({
+    xh:s.xh,xm:s.xm,zhuanye:s.zhuanye,bj:s.bj,zhuanye_score:s.zhuanye_score,
+    deyu:{sixiang:s.deyu_sixiang,biaozhang:s.deyu_biaozhang,ganbu:safeArr(s.deyu_ganbu),rongyu:safeArr(s.deyu_rongyu),custom:s.deyu_custom},
+    zhiyu:{jingsai:s.zhiyu_jingsai,jineng:safeArr(s.zhiyu_jineng),chuangye:s.zhiyu_chuangye,custom:s.zhiyu_custom},
+    tiyu:{chengji:s.tiyu_chengji,tice:s.tiyu_tice,jiangli:s.tiyu_jiangli,custom:s.tiyu_custom},
+    meiyu:{jiangli:s.meiyu_jiangli,custom:s.meiyu_custom},
+    laoyu:{zhiyuanCishu:s.laoyu_zhiyuanCishu,xianxue:s.laoyu_xianxue,qinshi:s.laoyu_qinshi,shehui:s.laoyu_shehui,custom:s.laoyu_custom},
+    koufen:{chufen:s.koufen_chufen,richang:s.koufen_richang},
+    zongce:Number(s.zongceScore.toFixed(2))
+  }));
+  downloadFile('综测数据备份_'+stamp()+'.json',JSON.stringify(data,null,2),'application/json');
+  toast('已导出数据备份','ok');
+});
+function safeArr(v){try{const p=JSON.parse(v||'[]');return Array.isArray(p)?p:[];}catch(e){return [];}}
 
 async function loadAttendanceRoster(){
   const date=document.getElementById('attDate').value;

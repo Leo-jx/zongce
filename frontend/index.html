@@ -120,7 +120,7 @@ table.route .r-desc{color:#3a6d9e}
     <div class="tips">
       <div class="tips-t">账号性质 → 目标页面</div>
       <table class="route" id="routeTable"></table>
-      <div class="tips-f">学号为 8~12 位纯数字，工号为字母开头；忘记密码请联系辅导员或管理员重置。</div>
+      <div class="tips-f" id="tipsHint"></div>
     </div>
   </div>
 
@@ -184,7 +184,7 @@ function validate() {
 
   let msg = '';
   if (!account) msg = '请输入学号或工号';
-  else if (type === 'unknown') msg = '账号格式不正确：学号为 8~12 位数字，工号为字母开头的字母数字组合';
+  else if (type === 'unknown') msg = '账号格式不正确：' + ZCAuth.ACCOUNT_HINT;
   else if (!password) msg = '请输入密码';
   else if (password.length < 6) msg = '密码至少 6 位';
 
@@ -284,6 +284,8 @@ el('btnEye').addEventListener('click', () => {
   p.type = show ? 'text' : 'password';
   el('btnEye').textContent = show ? '隐藏' : '显示';
 });
+
+el('tipsHint').textContent = ZCAuth.ACCOUNT_HINT + '；忘记密码请联系辅导员或管理员重置。';
 
 // 渲染「账号性质 → 目标页面」映射表（数据源：auth.js 的 ROLE_ROUTES）
 el('routeTable').innerHTML = ZCAuth.ROLE_ROUTES.map(r =>

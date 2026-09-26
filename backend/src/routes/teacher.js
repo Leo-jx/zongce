@@ -165,30 +165,56 @@ export async function handleTeacher(path, method, ctx) {
 
     const hash = bcrypt.hashSync(DEFAULT_STUDENT_PASSWORD, 10);
     const created = [];
+    const updated = [];
     const skipped = [];
+    // update_existing：学号已存在时更新姓名 / 专业 / 学业成绩（用于批量导入成绩）
+    const updateExisting = !!d.update_existing;
 
     for (const row of rows) {
       const xh = String(row.xh || row[0] || '').trim();
       const xm = String(row.xm || row[1] || '').trim();
-      if (!xh || !xm) { skipped.push({ xh, reason: '学号或姓名为空' }); continue; }
+      if (!xh) { skipped.push({ xh, reason: '学号为空' }); continue; }
 
-      const existed = await db.queryOne('SELECT id FROM students WHERE xh = ?', [xh]);
-      if (existed) { skipped.push({ xh, reason: '学号已存在' }); continue; }
+      // 第 4 列为学业成绩，缺省时沿用 80 分基础分
+      const rawScore = row.zhuanye_score !== undefined ? row.zhuanye_score : row[3];
+      const score = rawScore === undefined || rawScore === null || rawScore === ''
+        ? 80 : (Number(rawScore) || 0);
+
+      const existed = await db.queryOne('SELECT id, fdy FROM students WHERE xh = ?', [xh]);
+      if (existed) {
+        if (!updateExisting) { skipped.push({ xh, reason: '学号已存在' }); continue; }
+        if (ctx.user.role !== 'admin' && existed.fdy !== teacherAccount) {
+          skipped.push({ xh, reason: '该生不属于本人班级' }); continue;
+        }
+        const zhuanye = String(row.zhuanye || row[2] || d.major || '').trim();
+        const sets = ['zhuanye_score = ?'];
+        const params = [score];
+        if (xm) { sets.push('xm = ?'); params.push(xm); }
+        if (zhuanye) { sets.push('zhuanye = ?'); params.push(zhuanye); }
+        params.push(xh);
+        await db.update('UPDATE students SET ' + sets.join(', ') + ' WHERE xh = ?', params);
+        if (xm) await db.update('UPDATE users SET name = ? WHERE account = ? AND role = ?', [xm, xh, 'student']);
+        updated.push(xh);
+        continue;
+      }
+
+      if (!xm) { skipped.push({ xh, reason: '新生缺少姓名' }); continue; }
 
       const zhuanye = String(row.zhuanye || row[2] || d.major || '').trim();
+      // 学号即账号，初始密码统一 123456
       await db.insert(
         'INSERT OR IGNORE INTO users (role, account, password_hash, name, status, created_at) VALUES (?, ?, ?, ?, 1, ?)',
         ['student', xh, hash, xm, now()]
       );
       await db.insert(
         `INSERT INTO students (xh, xm, zhuanye, bj, fdy, class_id, zhuanye_score, deyu_ganbu, deyu_rongyu, zhiyu_jineng)
-         VALUES (?, ?, ?, ?, ?, ?, 80, '[]', '[]', '[]')`,
-        [xh, xm, zhuanye, className, teacherAccount, cls.id]
+         VALUES (?, ?, ?, ?, ?, ?, ?, '[]', '[]', '[]')`,
+        [xh, xm, zhuanye, className, teacherAccount, cls.id, score]
       );
       created.push(xh);
     }
 
-    return ok({ class_id: cls.id, class_name: className, teacher_account: teacherAccount, created, skipped }, env);
+    return ok({ class_id: cls.id, class_name: className, teacher_account: teacherAccount, created, updated, skipped }, env);
   }
 
   // ===================== 学生信息与成绩 =====================

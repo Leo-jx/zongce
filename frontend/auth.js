@@ -54,11 +54,16 @@
     ],
   };
 
-  /** 账号外观识别：学号为纯数字，工号为字母开头 */
+  /**
+   * 账号外观识别：学号为纯数字，工号为字母开头
+   * 学号位数放宽到 6~20 位，兼容不同院校的长学号（含年份+院系+班级+序号等编码）。
+   */
   var PATTERNS = {
-    student: /^\d{8,12}$/,
+    student: /^\d{6,20}$/,
     staff: /^[A-Za-z][A-Za-z0-9_.-]{1,19}$/,
   };
+
+  var ACCOUNT_HINT = '学号为 6~20 位纯数字，工号为字母开头';
 
   function detectAccountType(account) {
     var v = String(account || '').trim();
@@ -148,6 +153,7 @@
     TOKEN_KEY: TOKEN_KEY,
     USER_KEY: USER_KEY,
     LOGIN_PAGE: LOGIN_PAGE,
+    ACCOUNT_HINT: ACCOUNT_HINT,
     ROLE_ROUTES: ROLE_ROUTES,
     ROLE_HOME: ROLE_HOME,
     ROLE_LABEL: ROLE_LABEL,

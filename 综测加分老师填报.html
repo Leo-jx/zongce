@@ -1,0 +1,2300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>学生综合素质测评计算工具</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%231b5fa8'/%3E%3Ctext x='12' y='17' font-size='13' fill='%23fff' text-anchor='middle' font-family='sans-serif' font-weight='bold'%3E综%3C/text%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#f2f5f9; --card:#ffffff; --line:#e3e8ef; --line-strong:#c9d3e0;
+  --ink:#1f2d3d; --ink-2:#52657a; --ink-3:#8a9bad;
+  --primary:#1b5fa8; --primary-2:#2f7fd1; --primary-bg:#eaf2fb;
+  --good:#1a7f4b; --warn:#b3541e; --bad:#b3362f;
+  --mod-de:#2f7fd1; --mod-zhi:#7a5af0; --mod-ti:#0e9f8b; --mod-mei:#d45a8a; --mod-lao:#b3801f; --mod-ko:#b3362f;
+  --radius:10px; --shadow:0 1px 3px rgba(31,45,61,.08),0 4px 16px rgba(31,45,61,.06);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{
+  font-family:"Microsoft YaHei","PingFang SC","Source Han Sans SC","Noto Sans CJK SC",system-ui,sans-serif;
+  background:var(--bg); color:var(--ink); font-size:14px; line-height:1.55;
+}
+button{font-family:inherit; cursor:pointer}
+input,select,textarea{font-family:inherit}
+.wrap{max-width:1280px;margin:0 auto;padding:16px 20px 60px}
+
+/* ===== 顶栏 ===== */
+.topbar{
+  display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+  background:linear-gradient(120deg,#16365f 0%,#1b5fa8 60%,#2f7fd1 100%);
+  color:#fff; border-radius:14px; padding:18px 22px; box-shadow:var(--shadow);
+}
+.topbar h1{font-size:20px; font-weight:700; letter-spacing:.5px}
+.topbar .sub{font-size:12.5px; opacity:.85; margin-top:3px}
+.topbar .actions{display:flex; gap:8px; flex-wrap:wrap}
+.btn{
+  border:1px solid var(--line-strong); background:#fff; color:var(--ink);
+  border-radius:8px; padding:7px 14px; font-size:13px; display:inline-flex; align-items:center; gap:6px;
+  transition:all .15s; white-space:nowrap;
+}
+.btn:hover{border-color:var(--primary); color:var(--primary)}
+.btn.primary{background:var(--primary); border-color:var(--primary); color:#fff}
+.btn.primary:hover{background:var(--primary-2); color:#fff}
+.btn.ghost{background:rgba(255,255,255,.12); border-color:rgba(255,255,255,.35); color:#fff}
+.btn.ghost:hover{background:rgba(255,255,255,.22); border-color:rgba(255,255,255,.6); color:#fff}
+.btn:disabled{opacity:.5; cursor:not-allowed}
+.btn svg{width:15px;height:15px;flex:none}
+
+/* ===== 统计条 ===== */
+.stats{
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin:14px 0;
+}
+.stat{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:12px 16px; box-shadow:var(--shadow)}
+.stat .num{font-size:22px; font-weight:700; color:var(--primary)}
+.stat .lab{font-size:12px; color:var(--ink-2); margin-top:2px}
+.stat.good .num{color:var(--good)}
+
+/* ===== 规则条 ===== */
+.rulebar{
+  background:var(--primary-bg); border:1px solid #cfe0f3; color:#1c4c86;
+  border-radius:var(--radius); padding:10px 16px; font-size:12.5px; margin:14px 0;
+}
+.rulebar b{color:#16365f}
+.rulebar .warn{color:var(--warn); font-weight:600}
+
+/* ===== 工具栏 ===== */
+.toolbar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:0 0 12px}
+.toolbar .right{margin-left:auto; display:flex; gap:8px}
+.searchbox{display:flex; align-items:center; background:#fff; border:1px solid var(--line-strong); border-radius:8px; padding:0 10px; height:34px; width:220px}
+.searchbox input{border:0; outline:0; flex:1; font-size:13px; background:transparent; color:var(--ink)}
+.searchbox svg{width:14px;height:14px;color:var(--ink-3);margin-right:6px}
+
+/* ===== 主表 ===== */
+.tablecard{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden}
+.tablewrap{overflow-x:auto}
+table.main{width:100%; border-collapse:collapse; min-width:1080px; table-layout:fixed}
+table.main th{
+  background:#f6f8fb; color:var(--ink-2); font-weight:600; font-size:12px;
+  padding:10px 8px; border-bottom:1px solid var(--line-strong); text-align:center; position:sticky; top:0; z-index:2;
+}
+table.main td{padding:8px 8px; border-bottom:1px solid var(--line); text-align:center; font-size:13px; vertical-align:middle}
+table.main tr:last-child td{border-bottom:0}
+table.main tbody tr:hover{background:#f7fafd}
+.col-rank{width:60px} .col-xh{width:128px} .col-xm{width:96px}
+.col-mod{width:76px} .col-total{width:90px} .col-op{width:84px}
+.mod-score{font-weight:700}
+.mod-de .mod-score{color:var(--mod-de)} .mod-zhi .mod-score{color:var(--mod-zhi)}
+.mod-ti .mod-score{color:var(--mod-ti)} .mod-mei .mod-score{color:var(--mod-mei)}
+.mod-lao .mod-score{color:var(--mod-lao)} .mod-ko .mod-score{color:var(--mod-ko)}
+.td-total{font-size:15px; font-weight:800; color:var(--primary)}
+.td-kou{color:var(--bad); font-weight:600}
+.tag-edit{
+  display:inline-flex; align-items:center; gap:4px; background:var(--primary-bg); color:var(--primary);
+  border:1px solid #cfe0f3; border-radius:6px; padding:4px 10px; font-size:12px;
+}
+.tag-edit:hover{background:#dbeaf8}
+.tag-del{border:0; background:transparent; color:var(--ink-3); font-size:12px; padding:4px 6px; border-radius:6px}
+.tag-del:hover{color:var(--bad); background:#fbeceb}
+.empty{
+  padding:56px 20px; text-align:center; color:var(--ink-3);
+}
+.empty .big{font-size:16px; color:var(--ink-2); margin-bottom:6px}
+.empty .hint{font-size:13px}
+.chip{display:inline-block; padding:2px 8px; border-radius:20px; font-size:11px; background:#eef2f7; color:var(--ink-2)}
+.chip.ko{background:#fbeceb; color:var(--bad)}
+.chip.has{background:var(--primary-bg); color:var(--primary)}
+
+/* ===== 弹窗 ===== */
+.overlay{
+  position:fixed; inset:0; background:rgba(20,32,48,.45); display:none;
+  align-items:flex-start; justify-content:center; z-index:100; padding:28px 16px; overflow-y:auto;
+}
+.overlay.open{display:flex}
+.dialog{
+  background:#fff; border-radius:14px; width:960px; max-width:100%; box-shadow:0 12px 48px rgba(20,32,48,.3);
+  animation:pop .18s ease;
+}
+@keyframes pop{from{transform:translateY(12px);opacity:0}to{transform:none;opacity:1}}
+.dialog.wide{width:1200px}
+.dialog.head{padding:16px 22px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px}
+.dialog.head h2{font-size:16px; flex:1}
+.dialog.head .xh{color:var(--ink-3); font-size:13px; font-weight:400}
+.dialog .body{padding:18px 22px; max-height:68vh; overflow-y:auto}
+.dialog .foot{padding:14px 22px; border-top:1px solid var(--line); display:flex; gap:10px; justify-content:flex-end; align-items:center}
+.icon-x{background:transparent; border:0; color:var(--ink-3); font-size:18px; line-height:1; padding:4px 8px; border-radius:6px}
+.icon-x:hover{background:#f0f2f5; color:var(--ink)}
+
+/* 模块编辑卡 */
+.modgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(290px,1fr)); gap:12px}
+.modcard{border:1px solid var(--line); border-radius:10px; overflow:hidden; background:#fff}
+.modcard > .mc-head{padding:9px 14px; font-weight:700; font-size:13.5px; display:flex; align-items:center; justify-content:space-between; gap:8px}
+.mc-head .score{font-size:15px}
+.mc-body{padding:12px 14px; border-top:1px solid var(--line); display:grid; gap:9px}
+.frow{display:grid; grid-template-columns:96px 1fr; gap:8px; align-items:center}
+.frow .fl{font-size:12.5px; color:var(--ink-2); line-height:1.3}
+.frow input[type=number],.frow select{
+  width:100%; border:1px solid var(--line-strong); border-radius:6px; padding:5px 8px; font-size:13px; background:#fff; color:var(--ink);
+}
+.frow input[type=number]:focus,.frow select:focus{outline:0; border-color:var(--primary); box-shadow:0 0 0 2px rgba(31,95,168,.12)}
+.frow .hint{grid-column:2; font-size:11px; color:var(--ink-3)}
+.frow.single{grid-template-columns:1fr}
+.hint{font-size:11px; color:var(--ink-3); line-height:1.4}
+.mod-de .mc-head{background:#eef5fc; color:var(--mod-de)}
+.mod-zhi .mc-head{background:#f1edfd; color:var(--mod-zhi)}
+.mod-ti .mc-head{background:#e8f7f4; color:var(--mod-ti)}
+.mod-mei .mc-head{background:#fcedf4; color:var(--mod-mei)}
+.mod-lao .mc-head{background:#faf3e3; color:var(--mod-lao)}
+.mod-ko .mc-head{background:#fdeeec; color:var(--mod-ko)}
+.score-preview{font-size:14px; font-weight:800}
+.mod-de .score-preview{color:var(--mod-de)} .mod-zhi .score-preview{color:var(--mod-zhi)}
+.mod-ti .score-preview{color:var(--mod-ti)} .mod-mei .score-preview{color:var(--mod-mei)}
+.mod-lao .score-preview{color:var(--mod-lao)} .mod-ko .score-preview{color:var(--mod-ko)}
+.totbar{
+  display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+  background:#f7fafd; border:1px dashed var(--line-strong); border-radius:10px; padding:12px 16px; margin-bottom:12px;
+}
+.totbar .formula{font-size:12.5px; color:var(--ink-2)}
+.totbar .result{font-size:18px; font-weight:800; color:var(--primary)}
+
+/* ===== 导入弹窗 ===== */
+.tabbar{display:flex; gap:6px; border-bottom:1px solid var(--line); margin-bottom:14px}
+.tabbtn{border:0; background:transparent; padding:9px 16px; font-size:13.5px; color:var(--ink-2); border-bottom:2px solid transparent}
+.tabbtn.active{color:var(--primary); border-bottom-color:var(--primary); font-weight:600}
+.dropzone{
+  border:2px dashed var(--line-strong); border-radius:10px; padding:28px 20px; text-align:center; color:var(--ink-2);
+  transition:all .15s; background:#fbfcfe;
+}
+.dropzone.drag{border-color:var(--primary); background:var(--primary-bg); color:var(--primary)}
+.dropzone .dz-big{font-size:15px; margin-bottom:6px}
+.dropzone .dz-small{font-size:12px; color:var(--ink-3)}
+.pastearea{width:100%; min-height:150px; border:1px solid var(--line-strong); border-radius:8px; padding:10px 12px; font-size:12.5px; resize:vertical; background:#fff; color:var(--ink); line-height:1.5}
+.fmtcode{background:#f4f6f9; border:1px solid var(--line); border-radius:6px; padding:8px 12px; font-size:12px; color:var(--ink-2); white-space:pre-wrap; margin:6px 0 0}
+.import-preview{font-size:12.5px; color:var(--ink-2); margin-top:10px}
+.import-preview b{color:var(--primary)}
+.previewlist{margin-top:8px; border:1px solid var(--line); border-radius:8px; max-height:180px; overflow-y:auto; font-size:12px}
+.previewlist table{width:100%; border-collapse:collapse}
+.previewlist th{background:#f6f8fb; padding:6px 10px; text-align:left; font-weight:600; position:sticky; top:0}
+.previewlist td{padding:5px 10px; border-top:1px solid var(--line)}
+.previewlist .ok{color:var(--good)} .previewlist .bad{color:var(--bad)}
+
+/* ===== 轻提示 ===== */
+.toast{
+  position:fixed; bottom:28px; left:50%; transform:translateX(-50%) translateY(20px);
+  background:#1f2d3d; color:#fff; padding:10px 20px; border-radius:8px; font-size:13px;
+  opacity:0; pointer-events:none; transition:all .25s; z-index:200; max-width:86vw; box-shadow:0 6px 24px rgba(0,0,0,.25);
+}
+.toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+.toast.err{background:var(--bad)}
+.toast.ok{background:var(--good)}
+
+/* ===== 响应式 ===== */
+@media (max-width:720px){
+  .wrap{padding:10px 10px 40px}
+  .topbar{padding:14px 16px}
+  .topbar h1{font-size:17px}
+  .searchbox{width:100%}
+  .toolbar .right{margin-left:0; width:100%}
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .dialog .body{padding:14px}
+  #exportOverlay .modgrid{grid-template-columns:1fr !important}
+  .totbar .formula{font-size:11.5px}
+}
+@media print{ .topbar,.stats,.toolbar,.rulebar{display:none} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ===== 顶栏 ===== -->
+  <header class="topbar">
+    <div>
+      <h1>学生综合素质测评计算工具</h1>
+      <div class="sub">依据《湖南民族职业学院学生综合素质测评实施办法（暂行）》· 德智体美劳五育加权 + 扣分项</div>
+    </div>
+    <div class="actions">
+      <button class="btn ghost" id="btnPlan" title="教学计划库（按专业年级匹配必修/限选）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20V4a2 2 0 00-2-2H6.5A2.5 2.5 0 004 4.5v15z"/><path d="M4 19.5A2.5 2.5 0 006.5 22H20v-5"/></svg>教学计划</button>
+      <button class="btn ghost" id="btnImport" title="导入学生成绩"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>导入成绩</button>
+      <button class="btn ghost" id="btnTemplate" title="下载导入模板"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M9 15h6M9 11h4"/></svg>下载模板</button>
+      <button class="btn primary" id="btnExport" title="导出综测评分表 Excel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15V3m0 0L8 7m4-4l4 4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>导出 Excel</button>
+    </div>
+  </header>
+
+  <!-- ===== 规则速览 ===== -->
+  <div class="rulebar">
+    <div>
+      计算口径：<b>综测总分 = 德×20% + 智×50% + 体×10% + 美×10% + 劳×10% + 扣分项</b>；各模块基础分为
+      <b>德 80 / 智(专业成绩) 80 / 体 50+30 / 美 80 / 劳 80</b>，各模块奖励分均封顶 <b>20 分</b>；同一项目不重复计分。
+      <span class="warn">奖励分合计超过 20 时按 20 计，扣分项为负分。</span>
+    </div>
+  </div>
+
+  <!-- ===== 统计 ===== -->
+  <div class="stats" id="stats">
+    <div class="stat"><div class="num" id="stCount">0</div><div class="lab">学生人数</div></div>
+    <div class="stat good"><div class="num" id="stAvg">–</div><div class="lab">平均综测分</div></div>
+    <div class="stat"><div class="num" id="stTop">–</div><div class="lab">最高综测分</div></div>
+    <div class="stat"><div class="num" id="stFilled">0</div><div class="lab">已编辑加分明细</div></div>
+  </div>
+
+  <!-- ===== 工具栏 ===== -->
+  <div class="toolbar">
+    <div class="searchbox">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input id="searchInput" placeholder="搜索学号 / 姓名…" autocomplete="off">
+    </div>
+    <div class="right">
+      <button class="btn" id="btnDemo">填入示例数据</button>
+      <button class="btn" id="btnClear">清空全部</button>
+    </div>
+  </div>
+
+  <!-- ===== 主表 ===== -->
+  <div class="tablecard">
+    <div class="tablewrap">
+      <table class="main">
+        <colgroup>
+          <col class="col-rank"><col class="col-xh"><col class="col-xm">
+          <col class="col-mod"><col class="col-mod"><col class="col-mod"><col class="col-mod"><col class="col-mod"><col class="col-mod">
+          <col class="col-total"><col class="col-op">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>排名</th><th>学号</th><th>姓名</th>
+            <th>德<br>（20%）</th><th>智<br>（50%）</th><th>体<br>（10%）</th><th>美<br>（10%）</th><th>劳<br>（10%）</th><th>扣分</th>
+            <th>综测分数</th><th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="emptyBox">
+      <div class="big">还没有学生数据</div>
+      <div class="hint">点击上方「导入成绩」导入学生名单与成绩，或点击「填入示例数据」快速体验</div>
+    </div>
+  </div>
+
+  <div style="margin-top:14px;font-size:12px;color:var(--ink-3)">
+    数据保存在当前浏览器本地（localStorage），刷新页面不丢失。更换电脑或浏览器时请先「导出数据备份」（.json），换环境后导入恢复。
+  </div>
+
+</div>
+
+<!-- ===== 加分明细编辑弹窗 ===== -->
+<div class="overlay" id="editOverlay">
+  <div class="dialog wide">
+    <div class="head">
+      <h2>编辑加分明细 <span class="xh" id="edStudentInfo"></span></h2>
+      <button class="icon-x" id="editClose" aria-label="关闭">×</button>
+    </div>
+    <div class="body">
+      <div class="totbar">
+        <div class="formula">综测 = 德×20% + 智×50% + 体×10% + 美×10% + 劳×10% + 扣分（负值）</div>
+        <div class="result">综测总分：<span id="edTotal">0.00</span> 分</div>
+      </div>
+      <div class="modgrid" id="modGrid"></div>
+      <div class="proofs" id="edProofs" style="display:none;margin-top:12px;padding:10px 12px;background:#f8fafc;border:1px dashed var(--line-strong);border-radius:10px;font-size:12px;color:var(--ink-2)"></div>
+    </div>
+    <div class="foot">
+      <span class="hint" style="margin-right:auto">各模块奖励分合计超过 20 自动按 20 计；修改后自动保存</span>
+      <button class="btn" id="editCancel">取消</button>
+      <button class="btn primary" id="editSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 教学计划弹窗 ===== -->
+<div class="overlay" id="planOverlay">
+  <div class="dialog">
+    <div class="head">
+      <h2>教学计划库</h2>
+      <button class="icon-x" id="planClose" aria-label="关闭">×</button>
+    </div>
+    <div class="body">
+      <div class="hint" style="margin-bottom:10px">导入教务处教学计划文件（.xlsx），自动识别「年级 / 专业 / 学年学期 / 课程名称 / 课程性质 / 总学分」。
+        导入成绩单时按学生专业年级匹配对应计划：<b>必修×0.7 + 限选×0.3</b> 加权计算专业成绩。
+        课程性质映射：公共必修课、公共基础课、学科基础课、专业基础课、专业核心课 → 必修；公共选修课、专业任选课、专业拓展课 → 限选。</div>
+      <div class="dropzone" id="planZone">
+        <div class="dz-big">点击选择或拖入教学计划文件（.xlsx，可多选）</div>
+        <div class="dz-small">支持教务处导出的教学计划表，需包含「课程名称」「课程性质」「总学分」「年级」「专业」「学年学期」列</div>
+      </div>
+      <input type="file" id="planInput" accept=".xlsx,.xls,.csv" multiple style="display:none">
+      <div class="import-preview" id="planPreview"></div>
+      <div class="plansum" id="planList"></div>
+    </div>
+    <div class="foot">
+      <span class="hint" style="margin-right:auto" id="planFootHint"></span>
+      <button class="btn" id="planClear">清空教学计划</button>
+      <button class="btn primary" id="planDone">完成</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 导入弹窗 ===== -->
+<div class="overlay" id="importOverlay">
+  <div class="dialog">
+    <div class="head">
+      <h2>导入学生成绩</h2>
+      <button class="icon-x" id="importClose" aria-label="关闭">×</button>
+    </div>
+    <div class="body">
+      <div class="tabbar">
+        <button class="tabbtn active" data-tab="file">上传文件</button>
+        <button class="tabbtn" data-tab="paste">粘贴文本</button>
+        <button class="tabbtn" data-tab="backup">恢复备份</button>
+        <button class="tabbtn" data-tab="apply">学生申报</button>
+      </div>
+      <div class="plansel">
+        <label>匹配教学计划：</label>
+        <select id="planSelect"><option value="">不匹配（全部课程按必修加权）</option></select>
+        <span class="hint" id="planMatchHint"></span>
+      </div>
+
+      <!-- 上传文件 -->
+      <div class="tabpanel" id="tab-file">
+        <div class="dropzone" id="dropzone">
+          <div class="dz-big">点击选择或拖入 Excel / CSV 文件</div>
+          <div class="dz-small">支持教务成绩单（.xls/.xlsx 宽表，课程列自动识别）、课程明细表、直接成绩表</div>
+        </div>
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" style="display:none">
+        <div class="fmtcode"><b>格式一（教务成绩单，软件技术专业示例，自动加权算专业成绩）：</b>
+排名    学号    姓名    班级    Web 应用程序开发 (学分:3)    JavaScript 网页交互式设计 (学分:4)    Python程序设计 (学分:2)    数据结构与算法 (学分:2)    获得总学分    加权平均分
+1    240103024812    李慧媛    24软件03班    98    90    95    97.6    25.7    91.80
+2    240103024809    黄佳柔    24软件03班    91.3    85    85    97.6    25.7    91.53
+<b>格式二（课程成绩明细，可区分必修/限选权重）：</b>
+学号    姓名    课程名称    学分    课程性质    成绩
+2023010101    张三    大学英语    4    必修    88
+2023010101    张三    高等数学    5    必修    92
+2023010102    李四    心理健康    2    限选    85
+<b>格式三（直接给专业成绩分，80 分制）：</b>
+学号    姓名    专业成绩
+2023010101    张三    72.5
+2023010102    李四    68.0</div>
+        <div class="import-preview" id="filePreview"></div>
+      </div>
+
+      <!-- 粘贴文本 -->
+      <div class="tabpanel" id="tab-paste" style="display:none">
+        <textarea class="pastearea" id="pasteArea" placeholder="从 Excel 复制数据后粘贴到这里，制表符或逗号分隔均可。&#10;&#10;格式一：学号、姓名、课程名称、学分、课程性质（必修/限选）、成绩&#10;格式二：学号、姓名、专业成绩（80分制）&#10;&#10;第一行需为表头，自动识别两种格式。"></textarea>
+        <div class="import-preview" id="pastePreview"></div>
+      </div>
+
+      <!-- 恢复备份 -->
+      <div class="tabpanel" id="tab-backup" style="display:none">
+        <div class="dropzone" id="backupZone">
+          <div class="dz-big">选择之前导出的备份文件（.json）</div>
+          <div class="dz-small">备份包含全部学生及加分明细，恢复后将覆盖当前数据</div>
+        </div>
+        <input type="file" id="backupInput" accept=".json" style="display:none">
+        <div class="import-preview" id="backupPreview"></div>
+      </div>
+
+      <!-- 学生申报 -->
+      <div class="tabpanel" id="tab-apply" style="display:none">
+        <div class="dropzone" id="applyZone">
+          <div class="dz-big">选择学生提交的申报文件（.json，可多选）</div>
+          <div class="dz-small">学生用「学生填报版」生成申报文件；导入后将更新该生加分明细，不覆盖专业成绩与基础分</div>
+        </div>
+        <input type="file" id="applyInput" accept=".json" multiple style="display:none">
+        <textarea class="pastearea" id="applyArea" placeholder="也可以把学生发来的申报内容（JSON 文本）直接粘贴到这里，一次可粘贴多名学生的申报。"></textarea>
+        <div class="import-preview" id="applyPreview"></div>
+      </div>
+    </div>
+    <div class="foot">
+      <span class="hint" id="importFootHint" style="margin-right:auto"></span>
+      <button class="btn" id="importCancel">取消</button>
+      <button class="btn primary" id="importConfirm">导入</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 证明材料查看弹层 ===== -->
+<div class="overlay" id="proofOverlay">
+  <div class="dialog" style="max-width:720px">
+    <div class="head">
+      <h2>证明材料 <span class="xh" id="proofTitle"></span></h2>
+      <button class="icon-x" id="proofClose" aria-label="关闭">×</button>
+    </div>
+    <div class="body" id="proofBody"></div>
+    <div class="foot"><button class="btn primary" id="proofDone">关闭</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- ===== 导出设置弹窗 ===== -->
+<div class="overlay" id="exportOverlay">
+  <div class="dialog">
+    <div class="head">
+      <h2>导出排名表设置</h2>
+      <button class="icon-x" id="exportClose" aria-label="关闭">×</button>
+    </div>
+    <div class="body">
+      <div class="hint" style="margin-bottom:10px">按《2025—2026学年综合测评成绩排名表》格式生成「班级排名」「专业排名」两个工作表，设置内容填入表格标题与签名栏。</div>
+      <div class="modgrid" style="grid-template-columns:repeat(2,1fr)">
+        <div class="frow"><div class="fl">学年</div><input type="text" id="expYear" placeholder="如 2025—2026" value="2025—2026"></div>
+        <div class="frow"><div class="fl">班级名称</div><input type="text" id="expClass" placeholder="如 护理2301班（班级排名表标题用）"></div>
+        <div class="frow"><div class="fl">专业名称</div><input type="text" id="expMajor" placeholder="如 护理（专业排名表标题用）"></div>
+        <div class="frow"><div class="fl">二级学院</div><input type="text" id="expCollege" placeholder="如 护理学院"></div>
+        <div class="frow"><div class="fl">辅导员</div><input type="text" id="expFdy" placeholder="班级排名表签名用"></div>
+        <div class="frow"><div class="fl">制表人</div><input type="text" id="expMaker" placeholder="专业排名表签名用"></div>
+        <div class="frow"><div class="fl">分管副院长</div><input type="text" id="expVice" placeholder="两表签名栏均用"></div>
+        <div class="frow"><div class="fl">院长</div><input type="text" id="expDean" placeholder="两表签名栏均用"></div>
+      </div>
+      <div class="hint" style="margin-top:10px">学生数据中含「班级」「辅导员」字段时，专业排名表将优先取学生本人数据；未填写的留空。</div>
+    </div>
+    <div class="foot">
+      <button class="btn" id="exportCancel">取消</button>
+      <button class="btn primary" id="exportConfirm">生成 Excel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* 导出组件双源加载：xlsx-style（带样式）→ 普通 xlsx，均失败则导出时自动降级为 CSV */
+(function(){
+  var libs = [
+    'https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js',
+    'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'
+  ];
+  function tryLoad(i){
+    if(i >= libs.length){ return; }
+    var s = document.createElement('script');
+    s.src = libs[i];
+    s.onload = function(){
+      try{ window.dispatchEvent(new Event('xlsxready')); }catch(e){}
+    };
+    s.onerror = function(){ tryLoad(i+1); };
+    document.head.appendChild(s);
+  }
+  tryLoad(0);
+})();
+</script>
+<script>
+/* ================================================================
+   学生综合素质测评计算工具
+   依据《湖南民族职业学院学生综合素质测评实施办法（暂行）》
+   ================================================================ */
+
+// ---------- 常量：选项表（与实施办法一致） ----------
+const OPTS = {
+  // 德育
+  sixiang: [ // 思想进步（单选）
+    {v:0, t:'无'},{v:1, t:'入党积极分子 +1'},{v:2, t:'中共预备党员 +2'},{v:3, t:'中共党员 +3'}
+  ],
+  biaozhang: [ // 见义勇为等表彰（单选，取最高一级）
+    {v:0, t:'无'},{v:5, t:'校级表彰 +5'},{v:6, t:'市级表彰 +6'},{v:8, t:'省级表彰 +8'},{v:10, t:'国家级表彰 +10'}
+  ],
+  ganbu: [ // 团学干部任职（可多选累计，上限10）
+    {v:8, t:'校级学生组织主席团/团委副书记 +8'},{v:6, t:'校级学生组织部门正副职 +6'},
+    {v:3, t:'校级学生组织部门干事 +3'},{v:6, t:'院级学生组织主席团/团总支副书记 +6'},
+    {v:4, t:'院级学生组织部门正副职 +4'},{v:3, t:'班级班干部 +3'},{v:2, t:'寝室长/信息员 +2'}
+  ],
+  rongyu: [ // 荣誉加分（可多选累计，上限10）
+    {v:10, t:'国家部委级荣誉 +10'},{v:6, t:'省级荣誉 +6'},{v:4, t:'市级荣誉 +4'},
+    {v:2, t:'校级荣誉 +2'},{v:10, t:'征兵入伍/三支一扶/西部计划 +10（计一次）'}
+  ],
+  // 智育
+  jingsai: [ // 学科技能竞赛（每类取最高一项，单选）
+    {v:0, t:'无'},
+    {v:20, t:'Ⅰ类 特等奖 +20'},{v:18, t:'Ⅰ类 一等奖 +18'},{v:16, t:'Ⅰ类 二等奖 +16'},{v:14, t:'Ⅰ类 三等奖 +14'},
+    {v:18, t:'Ⅱ类 特等奖 +18'},{v:15, t:'Ⅱ类 一等奖 +15'},{v:12, t:'Ⅱ类 二等奖 +12'},{v:10, t:'Ⅱ类 三等奖 +10'},
+    {v:15, t:'Ⅲ类 特等奖 +15'},{v:12, t:'Ⅲ类 一等奖 +12'},{v:10, t:'Ⅲ类 二等奖 +10'},{v:8, t:'Ⅲ类 三等奖 +8'},
+    {v:12, t:'Ⅳ类 特等奖 +12'},{v:10, t:'Ⅳ类 一等奖 +10'},{v:8, t:'Ⅳ类 二等奖 +8'},{v:6, t:'Ⅳ类 三等奖 +6'},
+    {v:5, t:'校赛 特等奖 +5'},{v:3, t:'校赛 一等奖 +3'},{v:2, t:'校赛 二等奖 +2'},{v:1, t:'校赛 三等奖 +1'}
+  ],
+  jineng: [ // 职业技能证书（可多选累计）
+    {v:4, t:'大学英语四级 +4'},{v:8, t:'大学英语六级 +8'},{v:3, t:'计算机二级 +3'},{v:5, t:'计算机三级 +5'},
+    {v:3, t:'普通话二甲 +3'},{v:5, t:'普通话一乙 +5'},{v:8, t:'普通话一甲 +8'},
+    {v:3, t:'职业技能初级 +3'},{v:5, t:'职业技能中级 +5'},{v:8, t:'职业技能高级 +8'}
+  ],
+  chuangye: [ // 创新创业
+    {v:0, t:'无'},{v:10, t:'自主创业（完成登记并实际运作）+10'}
+  ],
+  // 体育
+  tiyuChengji: [ // 体育期末成绩（50分）
+    {v:50, t:'体育课及格 +50'},{v:0, t:'无体育课/未及格 +0'}
+  ],
+  tice: [ // 体质测试（30分）
+    {v:30, t:'体测合格 +30'},{v:30, t:'退役士兵免测 +30'},{v:20, t:'病/伤/残免测 +20'},{v:0, t:'未参加体测 +0'}
+  ],
+  tiyuJiangli: [ // 体育奖励（按荣誉档，取最高一次）
+    {v:0, t:'无'},{v:2, t:'校级奖项 +2'},{v:4, t:'市级奖项 +4'},{v:6, t:'省级奖项 +6'},{v:10, t:'国家级奖项 +10'}
+  ],
+  // 美育
+  meiyuJiangli: [ // 美育奖励（文艺竞赛/大型演出，按竞赛档取最高一次）
+    {v:0, t:'无'},
+    {v:20, t:'Ⅰ类 特等奖 +20'},{v:18, t:'Ⅰ类 一等奖 +18'},{v:16, t:'Ⅰ类 二等奖 +16'},{v:14, t:'Ⅰ类 三等奖 +14'},
+    {v:18, t:'Ⅱ类 特等奖 +18'},{v:15, t:'Ⅱ类 一等奖 +15'},{v:12, t:'Ⅱ类 二等奖 +12'},{v:10, t:'Ⅱ类 三等奖 +10'},
+    {v:15, t:'Ⅲ类 特等奖 +15'},{v:12, t:'Ⅲ类 一等奖 +12'},{v:10, t:'Ⅲ类 二等奖 +10'},{v:8, t:'Ⅲ类 三等奖 +8'},
+    {v:12, t:'Ⅳ类 特等奖 +12'},{v:10, t:'Ⅳ类 一等奖 +10'},{v:8, t:'Ⅳ类 二等奖 +8'},{v:6, t:'Ⅳ类 三等奖 +6'},
+    {v:5, t:'校赛 特等奖 +5'},{v:3, t:'校赛 一等奖 +3'},{v:2, t:'校赛 二等奖 +2'},{v:1, t:'校赛 三等奖 +1'}
+  ],
+  // 劳育
+  shehui: [ // 社会实践（取最高一项）
+    {v:0, t:'无'},
+    {v:10, t:'国家级表彰（负责人/先进个人/报告获奖）+10'},{v:8, t:'省级表彰（负责人/先进个人/报告获奖）+8'},
+    {v:6, t:'市级表彰（负责人/先进个人/报告获奖）+6'},{v:4, t:'校级表彰（负责人/先进个人/报告获奖）+4'},
+    {v:5, t:'国家级先进集体成员 +5'},{v:4, t:'省级先进集体成员 +4'},{v:3, t:'市级先进集体成员 +3'},{v:2, t:'校级先进集体成员 +2'},
+    {v:2, t:'完成社会实践并提交报告（每份）+2'}
+  ],
+  // 扣分
+  chufen: [ // 处分（单选，取最高一级）
+    {v:0, t:'无'},{v:30, t:'公安查处/违法违纪等 -30'},
+    {v:20, t:'留校察看 -20'},{v:15, t:'记过 -15'},{v:10, t:'严重警告 -10'},{v:7, t:'警告 -7'},
+    {v:5, t:'全校通报批评 -5'},{v:2, t:'学院通报批评 -2'}
+  ]
+};
+
+// 各模块奖励封顶
+const CAP = 20;
+
+// ---------- 学生数据模型 ----------
+// s = {
+//   id, xh, xm,
+//   deyu:   {sixiang, biaozhang, ganbu[], rongyu[], custom},
+//   zhiyu:  {zhuanye, jingsai, jineng[], chuangye, custom},
+//   tiyu:   {chengji, tice, jiangli, custom},
+//   meiyu:  {jiangli, custom},
+//   laoyu:  {zhiyuanCishu, xianxue, qinshi, shehui, custom},
+//   koufen: {chufen, richang}
+// }
+
+// ---------- 计算函数 ----------
+function sum(vals){ return vals.reduce((a,b)=>a+(Number(b)||0),0); }
+function cap(v){ return Math.min(Math.max(v||0,0), CAP); }
+
+function calcDeyu(s){
+  const d = s.deyu;
+  let jl = (Number(d.sixiang)||0) + (Number(d.biaozhang)||0)
+         + Math.min(sum(d.ganbu), 10) + Math.min(sum(d.rongyu), 10)
+         + (Number(d.custom)||0);
+  jl = cap(jl);
+  return Math.min(80 + jl, 100);
+}
+function calcZhiyu(s){
+  const z = s.zhiyu;
+  let jl = (Number(z.jingsai)||0) + Math.min(sum(z.jineng), 20) + (Number(z.chuangye)||0) + (Number(z.custom)||0);
+  jl = cap(jl);
+  return Math.min((Number(z.zhuanye)||0) + jl, 100);
+}
+function calcTiyu(s){
+  const t = s.tiyu;
+  let jl = (Number(t.jiangli)||0) + (Number(t.custom)||0);
+  jl = cap(jl);
+  return Math.min((Number(t.chengji)||0) + (Number(t.tice)||0) + jl, 100);
+}
+function calcMeiyu(s){
+  const m = s.meiyu;
+  let jl = (Number(m.jiangli)||0) + (Number(m.custom)||0);
+  jl = cap(jl);
+  return Math.min(80 + jl, 100);
+}
+function calcLaoyu(s){
+  const l = s.laoyu;
+  const zhiyuan = Math.min(Number(l.zhiyuanCishu)||0, 10); // 1次=1分，10次及以上=10分
+  const xianxue = (Number(l.xianxue)||0) * 5;
+  let jl = zhiyuan + xianxue + (Number(l.qinshi)||0) + (Number(l.shehui)||0) + (Number(l.custom)||0);
+  jl = cap(jl);
+  return Math.min(80 + jl, 100);
+}
+function calcKoufen(s){
+  const k = s.koufen;
+  return -((Number(k.chufen)||0) + (Number(k.richang)||0));
+}
+function calcZongce(s){
+  const de = calcDeyu(s), zhi = calcZhiyu(s), ti = calcTiyu(s), mei = calcMeiyu(s), lao = calcLaoyu(s);
+  return de*0.20 + zhi*0.50 + ti*0.10 + mei*0.10 + lao*0.10 + calcKoufen(s);
+}
+function newStudent(xh, xm, zhuanye, bj, fdy){
+  const z = (zhuanye===undefined||zhuanye===null||zhuanye==='') ? 80 : Number(zhuanye);
+  return {
+    id: 's' + Date.now().toString(36) + Math.random().toString(36).slice(2,7),
+    xh: String(xh||''), xm: String(xm||''),
+    bj: String(bj||''), fdy: String(fdy||''),
+    deyu: {sixiang:0, biaozhang:0, ganbu:[], rongyu:[], custom:0},
+    zhiyu: {zhuanye:z, jingsai:0, jineng:[], chuangye:0, custom:0},
+    tiyu: {chengji:50, tice:30, jiangli:0, custom:0},
+    meiyu: {jiangli:0, custom:0},
+    laoyu: {zhiyuanCishu:0, xianxue:0, qinshi:0, shehui:0, custom:0},
+    koufen: {chufen:0, richang:0},
+    edited:false
+  };
+}
+
+// ---------- 状态 ----------
+let students = [];
+let editId = null;          // 正在编辑的学生 id
+let pendingImport = null;   // 待导入的数据
+let libReady = typeof XLSX !== 'undefined';
+window.addEventListener('xlsxready', ()=>{ libReady = true; });
+
+// ---------- 持久化 ----------
+const LS_KEY = 'zongce_v1';
+function save(){
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(students)); }catch(e){ console.warn('保存失败', e); }
+}
+function load(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(raw){ students = JSON.parse(raw); normalize(); }
+  }catch(e){ console.warn('读取本地数据失败', e); }
+}
+function normalize(){
+  students.forEach(s=>{
+    if(s.bj===undefined) s.bj = '';
+    if(s.fdy===undefined) s.fdy = '';
+    if(!s.deyu) s.deyu = {sixiang:0,biaozhang:0,ganbu:[],rongyu:[],custom:0};
+    if(!s.zhiyu) s.zhiyu = {zhuanye:80,jingsai:0,jineng:[],chuangye:0,custom:0};
+    if(!s.tiyu) s.tiyu = {chengji:50,tice:30,jiangli:0,custom:0};
+    if(!s.meiyu) s.meiyu = {jiangli:0,custom:0};
+    if(!s.laoyu) s.laoyu = {zhiyuanCishu:0,xianxue:0,qinshi:0,shehui:0,custom:0};
+    if(!s.koufen) s.koufen = {chufen:0,richang:0};
+    if(s.deyu.ganbu && !Array.isArray(s.deyu.ganbu)) s.deyu.ganbu = [];
+    if(s.deyu.rongyu && !Array.isArray(s.deyu.rongyu)) s.deyu.rongyu = [];
+    if(s.zhiyu.jineng && !Array.isArray(s.zhiyu.jineng)) s.zhiyu.jineng = [];
+  });
+}
+
+// ---------- 渲染 ----------
+function renderStats(){
+  const n = students.length;
+  document.getElementById('stCount').textContent = n;
+  if(n){
+    const total = students.reduce((a,s)=>a+calcZongce(s),0);
+    const tops = students.map(calcZongce).sort((a,b)=>b-a);
+    document.getElementById('stAvg').textContent = (total/n).toFixed(2);
+    document.getElementById('stTop').textContent = tops[0].toFixed(2);
+  } else {
+    document.getElementById('stAvg').textContent = '–';
+    document.getElementById('stTop').textContent = '–';
+  }
+  document.getElementById('stFilled').textContent = students.filter(s=>s.edited).length;
+}
+
+function renderTable(){
+  const tbody = document.getElementById('tbody');
+  const emptyBox = document.getElementById('emptyBox');
+  const kw = document.getElementById('searchInput').value.trim().toLowerCase();
+  let list = students.slice();
+  if(kw){
+    list = list.filter(s=> s.xh.toLowerCase().includes(kw) || s.xm.toLowerCase().includes(kw));
+  }
+  // 按综测降序排，同分按学号
+  list.sort((a,b)=>{
+    const d = calcZongce(b)-calcZongce(a);
+    if(Math.abs(d)>1e-9) return d;
+    return String(a.xh).localeCompare(String(b.xh));
+  });
+  // 计算排名（并列同名次）
+  const rankOf = {};
+  list.forEach((s,i)=>{
+    if(i===0) rankOf[s.id]=1;
+    else{
+      const prev = calcZongce(list[i-1]);
+      rankOf[s.id] = Math.abs(calcZongce(s)-prev)<1e-9 ? rankOf[list[i-1].id] : i+1;
+    }
+  });
+
+  tbody.innerHTML = '';
+  if(!list.length){
+    emptyBox.style.display = 'block';
+    return;
+  }
+  emptyBox.style.display = 'none';
+  const frag = document.createDocumentFragment();
+  list.forEach(s=>{
+    const tr = document.createElement('tr');
+    const ko = calcKoufen(s);
+    const chips = [];
+    if(s.edited) chips.push('<span class="chip has">已填明细</span>');
+    if(ko<0) chips.push('<span class="chip ko">扣 '+Math.abs(ko).toFixed(0)+'</span>');
+    tr.innerHTML =
+      '<td>'+rankOf[s.id]+'</td>'+
+      '<td>'+esc(s.xh)+'</td>'+
+      '<td>'+esc(s.xm)+'</td>'+
+      '<td class="mod-de"><span class="mod-score">'+calcDeyu(s).toFixed(1)+'</span></td>'+
+      '<td class="mod-zhi"><span class="mod-score">'+calcZhiyu(s).toFixed(1)+'</span></td>'+
+      '<td class="mod-ti"><span class="mod-score">'+calcTiyu(s).toFixed(1)+'</span></td>'+
+      '<td class="mod-mei"><span class="mod-score">'+calcMeiyu(s).toFixed(1)+'</span></td>'+
+      '<td class="mod-lao"><span class="mod-score">'+calcLaoyu(s).toFixed(1)+'</span></td>'+
+      '<td class="mod-ko"><span class="td-kou">'+(ko<0?ko.toFixed(0):'0')+'</span></td>'+
+      '<td><span class="td-total">'+calcZongce(s).toFixed(2)+'</span></td>'+
+      '<td><button class="tag-edit" data-act="edit" data-id="'+s.id+'">编辑</button>'+
+      '<button class="tag-del" data-act="del" data-id="'+s.id+'" title="删除该生">删</button></td>';
+    if(chips.length){
+      const td0 = tr.children[2];
+      const wrap = document.createElement('div');
+      wrap.style.display='inline-block'; wrap.style.marginLeft='6px';
+      wrap.innerHTML = chips.join('');
+      td0.appendChild(wrap);
+    }
+    frag.appendChild(tr);
+  });
+  tbody.appendChild(frag);
+  renderStats();
+}
+
+function esc(x){
+  return String(x).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderAll(){ renderTable(); }
+
+// ---------- 轻提示 ----------
+let toastTimer=null;
+function toast(msg, type){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (type?' '+type:'');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>{ t.className='toast'; }, 2800);
+}
+
+// ---------- 弹窗：加分明细编辑 ----------
+function buildSelect(opts, val, multi){
+  if(multi){
+    const sel = document.createElement('select');
+    sel.multiple = true; sel.size = Math.min(opts.length, 6);
+    sel.style.minHeight = '96px';
+    opts.forEach(o=>{
+      const op = document.createElement('option');
+      op.value = o.v; op.textContent = o.t;
+      if((val||[]).includes(o.v)) op.selected = true;
+      sel.appendChild(op);
+    });
+    return sel;
+  }
+  const sel = document.createElement('select');
+  opts.forEach(o=>{
+    const op = document.createElement('option');
+    op.value = o.v; op.textContent = o.t;
+    if(Number(val)===o.v) op.selected = true;
+    sel.appendChild(op);
+  });
+  return sel;
+}
+
+function openEdit(id){
+  editId = id;
+  const s = students.find(x=>x.id===id);
+  if(!s) return;
+  document.getElementById('edStudentInfo').textContent = s.xh + ' · ' + s.xm;
+  const grid = document.getElementById('modGrid');
+  grid.innerHTML = '';
+
+  // 德育
+  grid.appendChild(modCard('mod-de','德育（基础 80 + 奖励，封顶 20）', buildDeyu(s), s));
+  // 智育
+  grid.appendChild(modCard('mod-zhi','智育（专业成绩 + 奖励，封顶 20）', buildZhiyu(s), s));
+  // 体育
+  grid.appendChild(modCard('mod-ti','体育（成绩 50 + 体测 30 + 奖励，封顶 20）', buildTiyu(s), s));
+  // 美育
+  grid.appendChild(modCard('mod-mei','美育（基础 80 + 奖励，封顶 20）', buildMeiyu(s), s));
+  // 劳育
+  grid.appendChild(modCard('mod-lao','劳育（基础 80 + 奖励，封顶 20）', buildLaoyu(s), s));
+  // 扣分
+  grid.appendChild(modCard('mod-ko','扣分项（负分，从总分扣除）', buildKoufen(s), s));
+
+  const pe = document.getElementById('edProofs');
+  if(s.proofs && Object.keys(s.proofs).length){
+    let ph = '<b>证明材料（'+Object.keys(s.proofs).length+' 份）</b>';
+    Object.keys(s.proofs).forEach(k=>{
+      const v = s.proofs[k];
+      ph += '<div class="pf-item"><span>'+esc(PROOF_LABEL[k]||k)+'：</span><span class="pf-name">'+esc(v.name||'')+'</span><button class="linkbtn" onclick="viewProofsFromDB(\''+s.xh+'\')">查看</button></div>';
+    });
+    pe.innerHTML = ph;
+    pe.style.display = 'block';
+  } else {
+    pe.style.display = 'none';
+  }
+  document.getElementById('editOverlay').classList.add('open');
+  updateTotbar();
+}
+
+function modCard(cls, title, body, s){
+  const card = document.createElement('div');
+  card.className = 'modcard ' + cls;
+  const head = document.createElement('div');
+  head.className = 'mc-head';
+  head.innerHTML = '<span>'+title+'</span><span class="score-preview" id="pv-'+cls+'"></span>';
+  const bd = document.createElement('div');
+  bd.className = 'mc-body';
+  bd.appendChild(body);
+  card.appendChild(head); card.appendChild(bd);
+  return card;
+}
+function fieldRow(label, control, hint){
+  const row = document.createElement('div');
+  row.className = 'frow';
+  const l = document.createElement('div');
+  l.className = 'fl'; l.textContent = label;
+  row.appendChild(l); row.appendChild(control);
+  if(hint){ const h = document.createElement('div'); h.className='hint'; h.textContent = hint; row.appendChild(h); }
+  return row;
+}
+
+function buildDeyu(s){
+  const wrap = document.createElement('div');
+  const d = s.deyu;
+  // 思想进步
+  const si = buildSelect(OPTS.sixiang, d.sixiang);
+  si.dataset.k = 'deyu.sixiang';
+  wrap.appendChild(fieldRow('思想进步', si, '积极分子+1 / 预备党员+2 / 党员+3，取一项'));
+  // 见义勇为表彰
+  const bz = buildSelect(OPTS.biaozhang, d.biaozhang);
+  bz.dataset.k = 'deyu.biaozhang';
+  wrap.appendChild(fieldRow('见义勇为等表彰', bz, '校5 / 市6 / 省8 / 国10，取最高一级'));
+  // 团学干部
+  const gb = buildSelect(OPTS.ganbu, d.ganbu, true);
+  gb.dataset.k = 'deyu.ganbu';
+  wrap.appendChild(fieldRow('团学干部任职（可多选）', gb, '多选累计，干部类封顶 10 分'));
+  // 荣誉
+  const ry = buildSelect(OPTS.rongyu, d.rongyu, true);
+  ry.dataset.k = 'deyu.rongyu';
+  wrap.appendChild(fieldRow('荣誉加分（可多选）', ry, '同种奖励不同级别可累计，荣誉类封顶 10 分'));
+  // 自定义
+  const cu = numInput(d.custom);
+  cu.dataset.k = 'deyu.custom';
+  wrap.appendChild(fieldRow('其他德育加分（自定义）', cu, '不计入干部/荣誉上限，但总奖励封顶 20'));
+  bindChange(wrap);
+  return wrap;
+}
+function buildZhiyu(s){
+  const wrap = document.createElement('div');
+  const z = s.zhiyu;
+  // 专业成绩
+  const zy = numInput(z.zhuanye, 0, 80, 0.1);
+  zy.dataset.k = 'zhiyu.zhuanye';
+  wrap.appendChild(fieldRow('专业成绩（80分制）', zy, '由教务系统导出课程成绩按公式加权×80%计算，可在此直接填结果'));
+  // 竞赛
+  const js = buildSelect(OPTS.jingsai, z.jingsai);
+  js.dataset.k = 'zhiyu.jingsai';
+  wrap.appendChild(fieldRow('学科技能竞赛', js, 'Ⅰ-Ⅳ类及校赛，每类取最高一项'));
+  // 技能证书
+  const jn = buildSelect(OPTS.jineng, z.jineng, true);
+  jn.dataset.k = 'zhiyu.jineng';
+  wrap.appendChild(fieldRow('职业技能证书（可多选）', jn, '英语/计算机/普通话/职业技能证书，多选累计'));
+  // 创新创业
+  const cy = buildSelect(OPTS.chuangye, z.chuangye);
+  cy.dataset.k = 'zhiyu.chuangye';
+  wrap.appendChild(fieldRow('创新创业', cy, '自主创业（完成企业登记并实际运作）+10'));
+  // 自定义
+  const cu = numInput(z.custom);
+  cu.dataset.k = 'zhiyu.custom';
+  wrap.appendChild(fieldRow('其他智育加分（自定义）', cu, '总奖励封顶 20'));
+  bindChange(wrap);
+  return wrap;
+}
+function buildTiyu(s){
+  const wrap = document.createElement('div');
+  const t = s.tiyu;
+  const cj = buildSelect(OPTS.tiyuChengji, t.chengji);
+  cj.dataset.k = 'tiyu.chengji';
+  wrap.appendChild(fieldRow('期末体育成绩（50分）', cj, '及格得 50；无体育课参照上学年'));
+  const tc = buildSelect(OPTS.tice, t.tice);
+  tc.dataset.k = 'tiyu.tice';
+  wrap.appendChild(fieldRow('体质测试（30分）', tc, '合格 30 / 退役免测 30 / 病伤残免测 20 / 未测 0'));
+  const jl = buildSelect(OPTS.tiyuJiangli, t.jiangli);
+  jl.dataset.k = 'tiyu.jiangli';
+  wrap.appendChild(fieldRow('体育奖励', jl, '体育竞赛/心理活动/组织者，按荣誉档取最高一次'));
+  const cu = numInput(t.custom);
+  cu.dataset.k = 'tiyu.custom';
+  wrap.appendChild(fieldRow('其他体育加分（自定义）', cu, '总奖励封顶 20'));
+  bindChange(wrap);
+  return wrap;
+}
+function buildMeiyu(s){
+  const wrap = document.createElement('div');
+  const m = s.meiyu;
+  const jl = buildSelect(OPTS.meiyuJiangli, m.jiangli);
+  jl.dataset.k = 'meiyu.jiangli';
+  wrap.appendChild(fieldRow('文艺竞赛/大型演出获奖', jl, '按竞赛档取最高一次，同一项目不累加'));
+  const cu = numInput(m.custom);
+  cu.dataset.k = 'meiyu.custom';
+  wrap.appendChild(fieldRow('其他美育加分（自定义）', cu, '总奖励封顶 20'));
+  bindChange(wrap);
+  return wrap;
+}
+function buildLaoyu(s){
+  const wrap = document.createElement('div');
+  const l = s.laoyu;
+  const zy = numInput(l.zhiyuanCishu, 0, 99, 1);
+  zy.dataset.k = 'laoyu.zhiyuanCishu';
+  wrap.appendChild(fieldRow('志愿公益次数', zy, '1 次=1 分…10 次及以上=10 分'));
+  const xx = numInput(l.xianxue, 0, 99, 1);
+  xx.dataset.k = 'laoyu.xianxue';
+  wrap.appendChild(fieldRow('义务献血次数', xx, '每次 +5 分'));
+  const qs = numInput(l.qinshi, 0, 20, 1);
+  qs.dataset.k = 'laoyu.qinshi';
+  wrap.appendChild(fieldRow('最美寝室加分', qs, '成员 +5/次，寝室长另 +2/次，直接填合计'));
+  const sh = buildSelect(OPTS.shehui, l.shehui);
+  sh.dataset.k = 'laoyu.shehui';
+  wrap.appendChild(fieldRow('社会实践', sh, '同一事迹以最高级别表彰计，不重复'));
+  const cu = numInput(l.custom);
+  cu.dataset.k = 'laoyu.custom';
+  wrap.appendChild(fieldRow('其他劳育加分（自定义）', cu, '总奖励封顶 20'));
+  bindChange(wrap);
+  return wrap;
+}
+function buildKoufen(s){
+  const wrap = document.createElement('div');
+  const k = s.koufen;
+  const cf = buildSelect(OPTS.chufen, k.chufen);
+  cf.dataset.k = 'koufen.chufen';
+  wrap.appendChild(fieldRow('纪律处分', cf, '留校察看 20 / 记过 15 / 警告 7 / 通报 5·2 / 公安查处 30'));
+  const rc = numInput(k.richang, 0, 999, 1);
+  rc.dataset.k = 'koufen.richang';
+  wrap.appendChild(fieldRow('日常扣分合计', rc, '迟到早退1·缺勤3·晚归1·大功率5·抽烟酗酒6·损坏公物5·活动缺勤3·诚信3-8 等，汇总填写'));
+  bindChange(wrap);
+  return wrap;
+}
+function numInput(val, min, max, step){
+  const i = document.createElement('input');
+  i.type = 'number';
+  i.value = (val===undefined||val===null)?'':val;
+  if(min!==undefined) i.min = min;
+  if(max!==undefined) i.max = max;
+  i.step = step!==undefined?step:1;
+  return i;
+}
+function bindChange(wrap){
+  wrap.addEventListener('change', e=>{
+    const t = e.target;
+    if(!t.dataset.k) return;
+    setField(editId, t.dataset.k, t);
+  });
+  wrap.addEventListener('input', e=>{
+    const t = e.target;
+    if(!t.dataset.k) return;
+    setField(editId, t.dataset.k, t);
+  });
+}
+function setField(id, path, el){
+  const s = students.find(x=>x.id===id);
+  if(!s) return;
+  const parts = path.split('.');
+  const obj = s[parts[0]];
+  const key = parts[1];
+  if(el.multiple){
+    obj[key] = Array.from(el.selectedOptions).map(o=>Number(o.value));
+  } else if(el.type==='number'){
+    obj[key] = el.value===''?0:Number(el.value);
+  } else {
+    obj[key] = Number(el.value)||0;
+  }
+  s.edited = true;
+  updateTotbar();
+  renderTable();
+  save();
+}
+function updateTotbar(){
+  if(!editId) return;
+  const s = students.find(x=>x.id===editId);
+  if(!s) return;
+  const m = {de:'mod-de', zhi:'mod-zhi', ti:'mod-ti', mei:'mod-mei', lao:'mod-lao', ko:'mod-ko'};
+  document.getElementById('pv-mod-de').textContent = '德育 ' + calcDeyu(s).toFixed(1);
+  document.getElementById('pv-mod-zhi').textContent = '智育 ' + calcZhiyu(s).toFixed(1);
+  document.getElementById('pv-mod-ti').textContent = '体育 ' + calcTiyu(s).toFixed(1);
+  document.getElementById('pv-mod-mei').textContent = '美育 ' + calcMeiyu(s).toFixed(1);
+  document.getElementById('pv-mod-lao').textContent = '劳育 ' + calcLaoyu(s).toFixed(1);
+  document.getElementById('pv-mod-ko').textContent = '扣分 ' + calcKoufen(s).toFixed(0);
+  document.getElementById('edTotal').textContent = calcZongce(s).toFixed(2);
+}
+
+// ---------- 弹窗：导入 ----------
+function openImport(){
+  pendingImport = null;
+  document.getElementById('filePreview').innerHTML = '';
+  document.getElementById('pastePreview').innerHTML = '';
+  document.getElementById('backupPreview').innerHTML = '';
+  document.getElementById('pasteArea').value = '';
+  document.getElementById('applyArea').value = '';
+  document.getElementById('applyPreview').innerHTML = '';
+  document.getElementById('importFootHint').textContent = '';
+  document.getElementById('importOverlay').classList.add('open');
+}
+
+
+// ===== 教学计划库 =====
+const LS_PLAN_KEY = 'zongce_plans_v1';
+let PLANS = [];
+const PLAN_PROP = {
+  '公共必修课':'必修','公共基础课':'必修','学科基础课':'必修','专业基础课':'必修','专业核心课':'必修',
+  '公共选修课':'限选','专业任选课':'限选','专业拓展课':'限选'
+};
+function loadPlans(){
+  try{ PLANS = JSON.parse(localStorage.getItem(LS_PLAN_KEY)||'[]') || []; }
+  catch(e){ PLANS = []; }
+}
+function savePlans(){
+  localStorage.setItem(LS_PLAN_KEY, JSON.stringify(PLANS));
+}
+function planLabel(p){ return p.grade+'级 '+p.major+'（'+p.term+'）'; }
+function propType(prop){
+  const s = String(prop||'');
+  if(PLAN_PROP[s]) return PLAN_PROP[s];
+  if(/选修|任选|拓展/.test(s)) return '限选';
+  return '必修';
+}
+function normName(s){
+  return String(s||'').toLowerCase().replace(/\s+/g,'').replace(/[（(]/g,'(').replace(/[）)]/g,')').replace(/[\u3000]/g,'');
+}
+function matchCourse(name, plan){
+  const n = normName(name);
+  if(!n || !plan || !plan.courses) return null;
+  for(const c of plan.courses){
+    if(normName(c.name) === n) return c;
+  }
+  // 包含匹配（去重避免一测多课）
+  const cands = plan.courses.filter(c=>{
+    const cn = normName(c.name);
+    return (cn.indexOf(n)>=0 || n.indexOf(cn)>=0) && Math.abs(cn.length - n.length) <= 3;
+  });
+  return cands.length===1 ? cands[0] : null;
+}
+function inferStudentKey(bj){
+  // 从班级名解析 年级+专业关键词，如「24软件03班」→ {grade:'2024', kw:'软件'}
+  const s = String(bj||'');
+  const m = s.match(/^(\d{2})/);
+  const grade = m ? '20'+m[1] : '';
+  const kw = s.replace(/^\d{2}/,'').replace(/班$/,'').replace(/\d+$/,'').trim();
+  return {grade, kw};
+}
+function findBestPlan(grade, kw, courseNames){
+  if(!PLANS.length) return null;
+  let best = null, bestScore = 0;
+  PLANS.forEach(p=>{
+    let sc = 0;
+    if(p.grade === grade) sc += 10;
+    if(kw && (p.major.indexOf(kw)>=0 || kw.indexOf(p.major)>=0)) sc += 5;
+    if(courseNames && courseNames.length){
+      let hit = 0;
+      courseNames.forEach(cn=>{ if(matchCourse(cn, p)) hit++; });
+      sc += hit;
+    }
+    if(sc>bestScore){ bestScore = sc; best = p; }
+  });
+  return bestScore>0 ? best : null;
+}
+function currentPlan(){
+  const sel = document.getElementById('planSelect');
+  if(!sel || !sel.value) return null;
+  return PLANS.find(p=>p.id===sel.value) || null;
+}
+function renderPlanSelect(prefer){
+  const sel = document.getElementById('planSelect');
+  if(!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">不匹配（全部课程按必修加权）</option>' +
+    PLANS.map(p=>'<option value="'+p.id+'">'+esc(planLabel(p))+'（必修 '+p.nReq+' / 限选 '+p.nSel+'）</option>').join('');
+  let picked = null;
+  if(prefer){
+    picked = PLANS.find(p=>p.id===prefer) || null;
+  }
+  if(!picked && PLANS.length){
+    // 默认选第一个（老师可改）
+    picked = PLANS[0];
+  }
+  sel.value = picked ? picked.id : '';
+  updatePlanHint();
+}
+function updatePlanHint(){
+  const p = currentPlan();
+  const el = document.getElementById('planMatchHint');
+  if(!el) return;
+  el.textContent = p ? ('按 '+planLabel(p)+' 计算：必修×0.7 + 限选×0.3') : '';
+}
+function openPlanDialog(){
+  renderPlans();
+  document.getElementById('planOverlay').classList.add('show');
+}
+function closePlanDialog(){
+  document.getElementById('planOverlay').classList.remove('show');
+}
+function renderPlans(){
+  const el = document.getElementById('planList');
+  if(!PLANS.length){
+    el.innerHTML = '<div class="empty" style="padding:16px 0"><div class="hint">尚未导入教学计划。导入后，导入成绩单时可按学生专业年级自动匹配必修/限选。</div></div>';
+    document.getElementById('planFootHint').textContent = '共 0 份教学计划';
+    return;
+  }
+  const byKey = {};
+  PLANS.forEach(p=>{ byKey[p.id] = p; });
+  const keys = Object.keys(byKey);
+  let html = '<div class="plansum-title">已导入 '+keys.length+' 份教学计划（每份含多个专业）：</div>';
+  html += '<div class="previewlist"><table><tr><th>年级</th><th>专业</th><th>学期</th><th>必修</th><th>限选</th><th>课程总数</th><th>操作</th></tr>';
+  keys.forEach(id=>{
+    const p = byKey[id];
+    html += '<tr><td>'+esc(p.grade)+'级</td><td>'+esc(p.major)+'</td><td>'+esc(p.term)+'</td><td>'+p.nReq+'</td><td>'+p.nSel+'</td><td>'+p.courses.length+'</td><td><button class="linkbtn" onclick="deletePlan(\''+id+'\')">删除</button></td></tr>';
+  });
+  html += '</table></div>';
+  el.innerHTML = html;
+  document.getElementById('planFootHint').textContent = '共 '+keys.length+' 份教学计划（'+PLANS.length+' 个专业/学期条目）';
+}
+function deletePlan(id){
+  PLANS = PLANS.filter(p=>p.id!==id);
+  savePlans();
+  renderPlans();
+  renderPlanSelect();
+  toast('已删除该教学计划');
+}
+function parsePlanWorkbook(buf){
+  const wb = XLSX.read(buf, {type:'array'});
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+  if(!rows.length) throw new Error('文件为空');
+  // 定位表头行
+  let hi = -1;
+  for(let i=0;i<Math.min(rows.length, 15); i++){
+    const txt = rows[i].map(h=>String(h)).join(' ');
+    if(txt.indexOf('课程名称')>=0 && txt.indexOf('课程性质')>=0){ hi = i; break; }
+  }
+  if(hi<0) throw new Error('未找到表头行（需包含「课程名称」「课程性质」列）');
+  const hdr = rows[hi].map(h=>String(h).trim());
+  const ii = {};
+  hdr.forEach((h,i)=>{
+    const k = h.replace(/\s+/g,'');
+    ii[k] = i;
+  });
+  const gk = ['年级','年级'], pk = ['专业','专业名称'], nk = ['课程名称','课程名'],
+        qk = ['课程性质','性质'], sk = ['总学分','学分'], tk = ['学年学期','学期'];
+  const pick = (row, keys)=>{
+    for(const k of keys){
+      if(ii[k]!==undefined && row[ii[k]]!==undefined && row[ii[k]]!==null && String(row[ii[k]]).trim()!=='')
+        return String(row[ii[k]]).trim();
+    }
+    return '';
+  };
+  const groups = new Map();
+  rows.slice(hi+1).forEach(row=>{
+    if(!row || !row.length) return;
+    const grade = pick(row, gk), major = pick(row, pk), name = pick(row, nk),
+          prop = pick(row, qk), credit = pick(row, sk), term = pick(row, tk);
+    if(!name) return;
+    const key = grade+'|'+major+'|'+term;
+    if(!groups.has(key)) groups.set(key, {grade, major, term, courses:[]});
+    groups.get(key).courses.push({name, credit: credit===''?0:Number(credit), prop});
+  });
+  const plans = [];
+  groups.forEach((g, key)=>{
+    let nReq=0, nSel=0;
+    g.courses.forEach(c=>{
+      if(propType(c.prop)==='必修') nReq++; else nSel++;
+    });
+    const p = {id:'p'+Date.now()+'_'+plans.length, grade:g.grade, major:g.major, term:g.term,
+               courses:g.courses, nReq, nSel, file:''};
+    plans.push(p);
+  });
+  return plans;
+}
+async function handlePlanFiles(files){
+  const list = [];
+  for(const file of Array.from(files)){
+    try{
+      const buf = await file.arrayBuffer();
+      const plans = parsePlanWorkbook(buf);
+      plans.forEach(p=>{ p.file = file.name; });
+      list.push({file:file.name, plans});
+    }catch(e){
+      list.push({file:file.name, err:e.message});
+    }
+  }
+  let html = '';
+  let added = 0;
+  list.forEach(it=>{
+    if(it.err){
+      html += '<span class="bad">'+esc(it.file)+' 解析失败：'+esc(it.err)+'</span><br>';
+    } else {
+      html += esc(it.file)+' → '+it.plans.length+' 份教学计划';
+      it.plans.forEach(p=>{ html += '（'+planLabel(p)+' 必修'+p.nReq+' / 限选'+p.nSel+'）'; });
+      html += '<br>';
+      added += it.plans.length;
+    }
+  });
+  document.getElementById('planPreview').innerHTML = html;
+  if(added){
+    list.forEach(it=>{ if(it.plans) PLANS = PLANS.concat(it.plans); });
+    savePlans();
+    renderPlans();
+    renderPlanSelect();
+    toast('已导入 '+added+' 份教学计划');
+  }
+}
+
+function parseRows(headers, rows, plan){
+  // 返回 {mode:'detail'|'direct', students:[{xh,xm,zhuanye}], issues:[]}
+  const idx = {};
+  headers.forEach((h,i)=>{ idx[normalizeH(h)] = i; });
+  const issues = [];
+  // 宽表模式：表头含「课程名 (学分:X)」列（教务成绩单样式）
+  const wideCols = headers.map((h,i)=>{
+    const s = String(h);
+    const m = s.match(/\(学分\s*:\s*([\d.]+)\)/);
+    return m ? {i:i, name:s.replace(/\s*\(学分\s*:\s*[\d.]+\)\s*$/, '').trim(), credit:Number(m[1])} : null;
+  }).filter(Boolean);
+  const isWide = wideCols.length >= 2 && idx['学号']!==undefined;
+  const get = (row, keys)=>{
+    for(const k of keys){
+      if(idx[k]!==undefined && row[idx[k]]!==undefined && row[idx[k]]!==null && String(row[idx[k]]).trim()!=='')
+        return String(row[idx[k]]).trim();
+    }
+    return '';
+  };
+  if(isWide){
+    const xhi = idx['学号'], xmi = idx['姓名'], bji = idx['班级']!==undefined ? idx['班级'] : idx['班别'];
+    const stMap = new Map(), order = [];
+    const unmatchedSet = new Set(), matchedSet = new Set();
+    rows.forEach(row=>{
+      if(!row || !row.length) return;
+      const xh = xhi!==undefined ? String(row[xhi]===undefined?'':row[xhi]).trim() : '';
+      const xm = xmi!==undefined ? String(row[xmi]===undefined?'':row[xmi]).trim() : '';
+      const bj = bji!==undefined ? String(row[bji]===undefined?'':row[bji]).trim() : '';
+      if(!xh && !xm) return;
+      if(!stMap.has(xh)){ stMap.set(xh, {xh:xh, xm:xm, bj:bj, courses:[]}); order.push(xh); }
+      else {
+        const o = stMap.get(xh);
+        if(xm && !o.xm) o.xm = xm;
+        if(bj && !o.bj) o.bj = bj;
+      }
+      const o = stMap.get(xh);
+      wideCols.forEach(c=>{
+        const v = row[c.i];
+        if(v!==undefined && v!==null && String(v).trim()!=='' && !isNaN(Number(v))){
+          let required = true, planProp = '';
+          if(plan){
+            const mc = matchCourse(c.name, plan);
+            if(mc){
+              required = propType(mc.prop)==='必修';
+              planProp = mc.prop;
+              matchedSet.add(c.name);
+            } else {
+              unmatchedSet.add(c.name);
+            }
+          }
+          o.courses.push({name:c.name, credit:c.credit, required:required, score:Number(v), planProp:planProp});
+        }
+      });
+    });
+    if(plan && unmatchedSet.size){
+      issues.push('教学计划未匹配课程：'+Array.from(unmatchedSet).join('、')+'（已按必修计）');
+    }
+    const students = order.map(xh=>{
+      const o = stMap.get(xh);
+      let rsum=0, rc=0, lsum=0, lc=0;
+      o.courses.forEach(c=>{
+        if(c.required){ rsum += c.score*c.credit; rc += c.credit; }
+        else { lsum += c.score*c.credit; lc += c.credit; }
+      });
+      let zhuanye = null;
+      if(rc>0 && lc>0) zhuanye = (rsum/rc*0.7 + lsum/lc*0.3) * 0.8;
+      else if(rc>0) zhuanye = (rsum/rc) * 0.8;
+      else if(lc>0) zhuanye = (lsum/lc) * 0.8;
+      if(zhuanye!==null) zhuanye = Math.round(zhuanye*100)/100;
+      return {xh:o.xh, xm:o.xm, zhuanye:zhuanye, courses:o.courses, bj:o.bj};
+    });
+    return {mode:'wide', students:students, issues:issues, planUsed: plan ? planLabel(plan) : ''};
+  }
+  const hasDetail = ['课程','学分','性质','成绩'].some(k=>idx[k]!==undefined);
+  const mode = hasDetail ? 'detail' : 'direct';
+  const stMap = new Map();
+  const order = [];
+  rows.forEach((row, ri)=>{
+    if(!row || !row.length) return;
+    const xh = get(row, ['学号','id','ID','student_id']);
+    const xm = get(row, ['姓名','name']);
+    const bj = get(row, ['班级','班别']);
+    const fdy = get(row, ['辅导员','班主任']);
+    if(!xh && !xm){ return; }
+    if(mode==='direct'){
+      const zy = get(row, ['专业成绩','专业成绩分','zhuanye','专业']);
+      if(!stMap.has(xh)){
+        stMap.set(xh, {xh, xm, zhuanye: zy===''?null:Number(zy), bj, fdy});
+        order.push(xh);
+      } else {
+        if(xm && !stMap.get(xh).xm){ stMap.get(xh).xm = xm; }
+        if(bj && !stMap.get(xh).bj){ stMap.get(xh).bj = bj; }
+        if(fdy && !stMap.get(xh).fdy){ stMap.get(xh).fdy = fdy; }
+      }
+    } else {
+      const cname = get(row, ['课程','课程名称','课程名','科目']);
+      const credit = get(row, ['学分','credit']);
+      const prop = get(row, ['课程性质','性质','必修限选']);
+      const score = get(row, ['成绩','分数','score']);
+      if(!stMap.has(xh)){
+        stMap.set(xh, {xh, xm, bj, fdy, courses:[]});
+        order.push(xh);
+      } else {
+        if(xm && !stMap.get(xh).xm){ stMap.get(xh).xm = xm; }
+        if(bj && !stMap.get(xh).bj){ stMap.get(xh).bj = bj; }
+        if(fdy && !stMap.get(xh).fdy){ stMap.get(xh).fdy = fdy; }
+      }
+      if(cname && score!==''){
+        stMap.get(xh).courses.push({
+          name: cname,
+          credit: credit===''?1:Number(credit),
+          required: /限选|选修/.test(prop) ? false : true,
+          score: Number(score)
+        });
+      }
+    }
+  });
+  const students = order.map(xh=>{
+    const o = stMap.get(xh);
+    if(mode==='detail'){
+      let rsum=0,rc=0,lsum=0,lc=0;
+      o.courses.forEach(c=>{
+        if(c.required){ rsum += c.score*c.credit; rc += c.credit; }
+        else { lsum += c.score*c.credit; lc += c.credit; }
+      });
+      let zhuanye = null;
+      if(rc>0 && lc>0){
+        zhuanye = (rsum/rc*0.7 + lsum/lc*0.3) * 0.8;
+      } else if(rc>0){
+        zhuanye = (rsum/rc) * 0.8;
+      } else if(lc>0){
+        zhuanye = (lsum/lc) * 0.8;
+      }
+      if(zhuanye!==null) zhuanye = Math.round(zhuanye*100)/100;
+      return {xh:o.xh, xm:o.xm, zhuanye, courses:o.courses, bj:o.bj, fdy:o.fdy};
+    }
+    return {xh:o.xh, xm:o.xm, zhuanye:o.zhuanye, bj:o.bj, fdy:o.fdy};
+  });
+  return {mode, students, issues};
+}
+function normalizeH(h){
+  return String(h).replace(/\s+/g,'').toLowerCase().replace(/[（(].*?[)）]/g,'');
+}
+
+// 通用：展示解析预览
+function showParsed(result){
+  pendingImport = result;
+  const el = document.getElementById('filePreview');
+  const modeTxt = result.mode==='wide' ? '教务成绩单模式（按课程学分加权×0.8）' : (result.mode==='detail' ? '课程明细模式（自动加权计算专业成绩）' : '直接成绩模式');
+  let html = '识别到 <b>'+result.students.length+'</b> 名学生 · '+modeTxt;
+  if(result.planUsed) html += ' · <span class="good">'+esc(result.planUsed)+'</span>';
+  if(result.issues.length) html += ' · <span class="bad">'+result.issues.length+' 条提示</span>';
+  html += '<div class="previewlist"><table><tr><th>学号</th><th>姓名</th><th>专业成绩(80分制)</th></tr>';
+  result.students.slice(0,12).forEach(s=>{
+    const zy = s.zhuanye===null||s.zhuanye===undefined ? '<span class="bad">待填</span>' : s.zhuanye;
+    html += '<tr><td>'+esc(s.xh)+'</td><td>'+esc(s.xm)+'</td><td>'+zy+'</td></tr>';
+  });
+  if(result.students.length>12) html += '<tr><td colspan="3">…共 '+result.students.length+' 名</td></tr>';
+  html += '</table></div>';
+  el.innerHTML = html;
+}
+
+// ---------- 文件解析 ----------
+async function handleFile(file, kind){
+  if(kind==='backup'){
+    try{
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if(!Array.isArray(data)) throw new Error('格式不正确');
+      pendingImport = {mode:'backup', students:data};
+      document.getElementById('backupPreview').innerHTML = '备份文件包含 <b>'+data.length+'</b> 名学生（含加分明细），导入将<b>合并或覆盖</b>现有数据。';
+      document.getElementById('importFootHint').textContent = '恢复备份会覆盖同学号学生数据';
+      return;
+    }catch(e){
+      document.getElementById('backupPreview').innerHTML = '<span class="bad">备份文件解析失败：'+esc(e.message)+'</span>';
+      pendingImport = null;
+      return;
+    }
+  }
+  if(kind==='apply'){
+    try{
+      const text = await file.text();
+      showApplyParsed(text);
+    }catch(e){
+      document.getElementById('applyPreview').innerHTML = '<span class="bad">申报文件解析失败：'+esc(e.message)+'</span>';
+      pendingImport = null;
+    }
+    return;
+  }
+  try{
+    const buf = await file.arrayBuffer();
+    let wb;
+    if(file.name.toLowerCase().endsWith('.csv')){
+      const text = new TextDecoder('utf-8').decode(buf);
+      wb = XLSX.read(text, {type:'string'});
+    } else {
+      wb = XLSX.read(buf, {type:'array'});
+    }
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+    if(!rows.length){ showParseMsg('文件为空'); return; }
+    let hi = -1;
+    for(let i=0;i<Math.min(rows.length, 30); i++){
+      const txt = rows[i].map(h=>String(h)).join(' ');
+      if(txt.indexOf('学号')>=0 && txt.indexOf('姓名')>=0){ hi = i; break; }
+    }
+    if(hi<0){ showParseMsg('未找到表头行，请确认文件包含「学号」「姓名」列'); return; }
+    const headers = rows[hi].map(h=>String(h).trim());
+  // 自动匹配教学计划：根据首个数据行的班级（如 24软件03班 → 2024级 软件技术）
+  try{
+    const hIdx = {};
+    headers.forEach((h,i)=>{ hIdx[normalizeH(h)] = i; });
+    const bji2 = hIdx['班级']!==undefined ? hIdx['班级'] : (hIdx['班别']!==undefined ? hIdx['班别'] : -1);
+    const firstRow = rows[hi+1] || [];
+    const bjVal = bji2>=0 ? String(firstRow[bji2]===undefined?'':firstRow[bji2]) : '';
+    const ik = inferStudentKey(bjVal);
+    const courseNames = headers.map(h=>{
+      const s=String(h);
+      const m=s.match(/\(学分\s*:\s*([\d.]+)\)/);
+      return m ? s.replace(/\s*\(学分\s*:\s*[\d.]+\)\s*$/, '').trim() : null;
+    }).filter(Boolean);
+    const bp = findBestPlan(ik.grade, ik.kw, courseNames);
+    const sel = document.getElementById('planSelect');
+    if(bp && sel && sel.value!==bp.id){ sel.value = bp.id; updatePlanHint(); }
+  }catch(e){}
+    const result = parseRows(headers, rows.slice(hi+1), currentPlan());
+    if(!result.students.length){ showParseMsg('未识别到有效数据，请检查表头是否包含「学号」「姓名」'); return; }
+    showParsed(result);
+  }catch(e){
+    showParseMsg('文件解析失败：'+e.message);
+  }
+}
+function showParseMsg(msg){
+  document.getElementById('filePreview').innerHTML = '<span class="bad">'+esc(msg)+'</span>';
+  pendingImport = null;
+}
+
+// ---------- 导入执行 ----------
+function doImport(){
+  if(!pendingImport){ toast('请先选择文件或粘贴数据','err'); return; }
+  const r = pendingImport;
+  if(r.mode==='backup'){
+    const map = new Map(students.map(s=>[s.xh, s]));
+    r.students.forEach(ns=>{
+      ns.edited = ns.edited!==false;
+      if(map.has(ns.xh)){ // 覆盖
+        const i = students.findIndex(s=>s.xh===ns.xh);
+        students[i] = ns;
+      } else {
+        students.push(ns);
+      }
+    });
+    toast('已恢复 '+r.students.length+' 名学生数据','ok');
+  } else if(r.mode==='apply'){
+    let updated = 0, added = 0, skipped = 0;
+    r.students.forEach(ns=>{
+      if(!ns.xh){ skipped++; return; }
+      const exist = students.find(s=>s.xh===ns.xh);
+      const proofMeta = {};
+      if(ns.proofs) Object.keys(ns.proofs).forEach(k=>{ proofMeta[k] = {name: ns.proofs[k].name||''}; });
+      if(ns.proofs && Object.keys(ns.proofs).length && ns.proofs[Object.keys(ns.proofs)[0]].data){
+        idbPutProofs(ns.xh, ns.proofs).catch(()=>{});
+      } else if(ns.xh && proofMeta && Object.keys(proofMeta).length){
+        // 只有文件名无图片（粘贴导入）：尝试保留旧图，删除不再存在的
+      }
+      if(exist){
+        if(ns.deyu) exist.deyu = Object.assign({}, exist.deyu, ns.deyu);
+        if(ns.zhiyu) exist.zhiyu = Object.assign({}, exist.zhiyu, ns.zhiyu);
+        if(ns.tiyu) exist.tiyu = Object.assign({}, exist.tiyu, ns.tiyu);
+        if(ns.meiyu) exist.meiyu = Object.assign({}, exist.meiyu, ns.meiyu);
+        if(ns.laoyu) exist.laoyu = Object.assign({}, exist.laoyu, ns.laoyu);
+        if(ns.koufen) exist.koufen = Object.assign({}, exist.koufen, ns.koufen);
+        if(ns.xm) exist.xm = ns.xm;
+        if(Object.keys(proofMeta).length) exist.proofs = proofMeta;
+        exist.edited = true;
+        updated++;
+      } else {
+        const s = newStudent(ns.xh, ns.xm, 80, ns.bj||'', ns.fdy||'');
+        if(ns.deyu) s.deyu = Object.assign({}, s.deyu, ns.deyu);
+        if(ns.zhiyu) s.zhiyu = Object.assign({}, s.zhiyu, ns.zhiyu);
+        if(ns.tiyu) s.tiyu = Object.assign({}, s.tiyu, ns.tiyu);
+        if(ns.meiyu) s.meiyu = Object.assign({}, s.meiyu, ns.meiyu);
+        if(ns.laoyu) s.laoyu = Object.assign({}, s.laoyu, ns.laoyu);
+        if(ns.koufen) s.koufen = Object.assign({}, s.koufen, ns.koufen);
+        if(Object.keys(proofMeta).length) s.proofs = proofMeta;
+        s.edited = true;
+        students.push(s);
+        added++;
+      }
+    });
+    toast('学生申报导入完成：更新 '+updated+' 人，新增 '+added+' 人'+(skipped?'，跳过 '+skipped+' 条无学号':'')+'。请核实申报项后导出排名表','ok');
+  } else {
+    let added = 0, updated = 0;
+    r.students.forEach(ns=>{
+      const exist = students.find(s=>s.xh===ns.xh);
+      if(exist){
+        if(ns.zhuanye!==null && ns.zhuanye!==undefined && !isNaN(ns.zhuanye)){
+          exist.zhiyu.zhuanye = ns.zhuanye;
+        }
+        if(ns.bj) exist.bj = ns.bj;
+        if(ns.fdy) exist.fdy = ns.fdy;
+        updated++;
+      } else {
+        students.push(newStudent(ns.xh, ns.xm, ns.zhuanye, ns.bj, ns.fdy));
+        added++;
+      }
+    });
+    toast('导入完成：新增 '+added+' 人，更新 '+updated+' 人','ok');
+  }
+  save(); renderAll();
+  document.getElementById('importOverlay').classList.remove('open');
+}
+
+// ---------- 导出 ----------
+const EXP_SET_KEY = 'zongce_exp_v1';
+function getExpSettings(){
+  try{ return JSON.parse(localStorage.getItem(EXP_SET_KEY)||'null') || {}; }catch(e){ return {}; }
+}
+function saveExpSettings(s){
+  try{ localStorage.setItem(EXP_SET_KEY, JSON.stringify(s)); }catch(e){}
+}
+
+function openExportDialog(){
+  if(!students.length){ toast('没有可导出的数据','err'); return; }
+  const s = getExpSettings();
+  document.getElementById('expYear').value = s.year || '2025—2026';
+  document.getElementById('expClass').value = s.className || '';
+  document.getElementById('expMajor').value = s.major || '';
+  document.getElementById('expCollege').value = s.college || '';
+  document.getElementById('expFdy').value = s.fdy || '';
+  document.getElementById('expMaker').value = s.maker || '';
+  document.getElementById('expVice').value = s.vice || '';
+  document.getElementById('expDean').value = s.dean || '';
+  document.getElementById('exportOverlay').classList.add('open');
+}
+
+function exportXlsx(){
+  if(!libReady){
+    toast('导出组件未加载（需联网），将改用 CSV 导出','warn');
+    exportCsv(); return;
+  }
+  const set = {
+    year: document.getElementById('expYear').value.trim() || '2025—2026',
+    className: document.getElementById('expClass').value.trim(),
+    major: document.getElementById('expMajor').value.trim(),
+    college: document.getElementById('expCollege').value.trim(),
+    fdy: document.getElementById('expFdy').value.trim(),
+    maker: document.getElementById('expMaker').value.trim(),
+    vice: document.getElementById('expVice').value.trim(),
+    dean: document.getElementById('expDean').value.trim()
+  };
+  saveExpSettings(set);
+
+  const wb = {SheetNames:[], Sheets:{}};
+  const ws1 = buildClassSheet(set);
+  const ws2 = buildMajorSheet(set);
+  const ws3 = buildDetailSheet();
+  ['班级排名','专业排名','加分明细'].forEach(function(n, i){
+    wb.SheetNames.push(n);
+    wb.Sheets[n] = [ws1, ws2, ws3][i];
+  });
+  XLSX.writeFile(wb, set.year + '学年综合测评成绩排名表.xlsx');
+  document.getElementById('exportOverlay').classList.remove('open');
+  toast('已导出 综合测评成绩排名表.xlsx（共 '+students.length+' 人）','ok');
+}
+
+// 单元格样式（xlsx-style 支持时生效，普通版自动忽略）
+function sc(cell, opts){
+  if(!cell) return;
+  opts = opts||{};
+  cell.s = {
+    font: {name: opts.font||'宋体', sz: opts.sz||11, bold: !!opts.bold},
+    alignment: {horizontal: opts.h||'center', vertical:'center', wrapText: !!opts.wrap},
+    border: opts.border ? {top:{style:'thin'},bottom:{style:'thin'},left:{style:'thin'},right:{style:'thin'}} : undefined
+  };
+}
+
+// 班级排名工作表（对齐《综合测评成绩排名表》格式）
+function buildClassSheet(set){
+  const groups = [];
+  const map = new Map();
+  students.forEach(s=>{
+    const bj = s.bj || '';
+    if(!map.has(bj)){ map.set(bj, []); groups.push({bj, list: map.get(bj)}); }
+    map.get(bj).push(s);
+  });
+  groups.forEach(g=>{
+    g.list.sort((a,b)=>{
+      const d = calcZongce(b)-calcZongce(a);
+      if(Math.abs(d)>1e-9) return d;
+      return String(a.xh).localeCompare(String(b.xh));
+    });
+    const ranks = {};
+    g.list.forEach((s,i)=>{
+      if(i===0) ranks[s.id]=1;
+      else ranks[s.id] = Math.abs(calcZongce(s)-calcZongce(g.list[i-1]))<1e-9 ? ranks[g.list[i-1].id] : i+1;
+    });
+    g.ranks = ranks;
+  });
+
+  const clsName = set.className || '          ';
+  const rows = [
+    [set.year + '学年 ' + clsName + '班学生综合素质测评\n成绩排名汇总表'],
+    ['二级学院：'+(set.college||'          ')+'    辅导员：'+(set.fdy||'          ')+'    分管副院长：'+(set.vice||'          ')+'    院长：'+(set.dean||'          ')],
+    ['序号','学生姓名','学号','德育\n得分','智育\n得分','体育\n得分','美育\n得分','劳育\n得分','总分','班级\n排名']
+  ];
+  let seq = 0;
+  groups.forEach(g=>{
+    g.list.forEach(s=>{
+      seq++;
+      rows.push([seq, s.xm, s.xh, r1(calcDeyu(s)), r1(calcZhiyu(s)), r1(calcTiyu(s)), r1(calcMeiyu(s)), r1(calcLaoyu(s)), r2(calcZongce(s)), g.ranks[s.id]]);
+    });
+  });
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!merges'] = [{s:{r:0,c:0}, e:{r:0,c:9}}, {s:{r:1,c:0}, e:{r:1,c:9}}];
+  ws['!cols'] = [{wch:6.5},{wch:14.5},{wch:13.2},{wch:7},{wch:6.7},{wch:6.3},{wch:6.5},{wch:7.3},{wch:7.7},{wch:9.2}];
+  const rh = [{hpt:51},{hpt:35},{hpt:33}];
+  for(let i=0;i<rows.length-3;i++) rh.push({hpt:25});
+  ws['!rows'] = rh;
+  for(let c=0;c<10;c++) sc(ws[XLSX.utils.encode_cell({r:0,c:c})], {font:'黑体', sz:20, bold:true, h:'center', wrap:true});
+  for(let c=0;c<10;c++) sc(ws[XLSX.utils.encode_cell({r:1,c:c})], {h:'left'});
+  for(let c=0;c<10;c++) sc(ws[XLSX.utils.encode_cell({r:2,c:c})], {wrap:true, border:true});
+  for(let r=3;r<rows.length;r++) for(let c=0;c<10;c++) sc(ws[XLSX.utils.encode_cell({r:r,c:c})], {border:true});
+  return ws;
+}
+
+// 专业排名工作表
+function buildMajorSheet(set){
+  const list = students.slice().sort((a,b)=>{
+    const d = calcZongce(b)-calcZongce(a);
+    if(Math.abs(d)>1e-9) return d;
+    return String(a.xh).localeCompare(String(b.xh));
+  });
+  const ranks = {};
+  list.forEach((s,i)=>{
+    if(i===0) ranks[s.id]=1;
+    else ranks[s.id] = Math.abs(calcZongce(s)-calcZongce(list[i-1]))<1e-9 ? ranks[list[i-1].id] : i+1;
+  });
+  const majorName = set.major || '          ';
+  const rows = [
+    [set.year + '学年 ' + majorName + '专业学生综合素质测评\n成绩排名汇总表'],
+    ['二级学院：'+(set.college||'          ')+'    制表人：'+(set.maker||'          ')+'    分管副院长：'+(set.vice||'          ')+'    院长：'+(set.dean||'          ')],
+    ['序号','班级','辅导员','学生姓名','学号','德育\n得分','智育\n得分','体育\n得分','美育\n得分','劳育\n得分','总分','专业\n排名']
+  ];
+  list.forEach((s,i)=>{
+    rows.push([i+1, s.bj||set.className||'', s.fdy||set.fdy||'', s.xm, s.xh, r1(calcDeyu(s)), r1(calcZhiyu(s)), r1(calcTiyu(s)), r1(calcMeiyu(s)), r1(calcLaoyu(s)), r2(calcZongce(s)), ranks[s.id]]);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!merges'] = [{s:{r:0,c:0}, e:{r:0,c:11}}, {s:{r:1,c:0}, e:{r:1,c:11}}];
+  ws['!cols'] = [{wch:7.3},{wch:12.9},{wch:10},{wch:10},{wch:11},{wch:5.3},{wch:5.5},{wch:5.5},{wch:6.9},{wch:4.9},{wch:6.2},{wch:5.9}];
+  const rh = [{hpt:59},{hpt:32},{hpt:36}];
+  for(let i=0;i<rows.length-3;i++) rh.push({hpt:25});
+  ws['!rows'] = rh;
+  for(let c=0;c<12;c++) sc(ws[XLSX.utils.encode_cell({r:0,c:c})], {font:'黑体', sz:20, bold:true, h:'center', wrap:true});
+  for(let c=0;c<12;c++) sc(ws[XLSX.utils.encode_cell({r:1,c:c})], {h:'left'});
+  for(let c=0;c<12;c++) sc(ws[XLSX.utils.encode_cell({r:2,c:c})], {wrap:true, border:true});
+  for(let r=3;r<rows.length;r++) for(let c=0;c<12;c++) sc(ws[XLSX.utils.encode_cell({r:r,c:c})], {border:true});
+  return ws;
+}
+
+// 加分明细工作表（便于核查）
+function buildDetailSheet(){
+  const list = rankedList();
+  const rows = [['学号','姓名','班级','德育奖励合计','智育奖励合计','体育奖励合计','美育奖励合计','劳育奖励合计','扣分合计','德育分','智育分','体育分','美育分','劳育分','综测分数','排名']];
+  list.forEach(item=>{
+    const s = item.s;
+    rows.push([s.xh, s.xm, s.bj||'', deyuJL(s), zhiyuJL(s), tiyuJL(s), meiyuJL(s), laoyuJL(s), -calcKoufen(s), r1(calcDeyu(s)), r1(calcZhiyu(s)), r1(calcTiyu(s)), r1(calcMeiyu(s)), r1(calcLaoyu(s)), r2(calcZongce(s)), item.rank]);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:14},{wch:10},{wch:12},{wch:11},{wch:11},{wch:11},{wch:11},{wch:11},{wch:8},{wch:8},{wch:8},{wch:8},{wch:8},{wch:8},{wch:10},{wch:6}];
+  for(let c=0;c<16;c++) sc(ws[XLSX.utils.encode_cell({r:0,c:c})], {bold:true, border:true});
+  for(let r=1;r<rows.length;r++) for(let c=0;c<16;c++) sc(ws[XLSX.utils.encode_cell({r:r,c:c})], {border:true});
+  return ws;
+}
+function exportCsv(){
+  const list = rankedList();
+  let csv = '\ufeff序号,学生姓名,学号,德育得分,智育得分,体育得分,美育得分,劳育得分,总分,排名\n';
+  list.forEach(item=>{
+    const s = item.s;
+    csv += [item.rank, s.xm, s.xh, r1(calcDeyu(s)), r1(calcZhiyu(s)), r1(calcTiyu(s)), r1(calcMeiyu(s)), r1(calcLaoyu(s)), r2(calcZongce(s)), item.rank].join(',')+'\n';
+  });
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '综合测评成绩排名表.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('已导出 综合测评成绩排名表.csv','ok');
+}
+function rankedList(){
+  const list = students.slice().sort((a,b)=>{
+    const d = calcZongce(b)-calcZongce(a);
+    if(Math.abs(d)>1e-9) return d;
+    return String(a.xh).localeCompare(String(b.xh));
+  });
+  const rankOf = {};
+  list.forEach((s,i)=>{
+    if(i===0) rankOf[s.id]=1;
+    else{
+      const prev = calcZongce(list[i-1]);
+      rankOf[s.id] = Math.abs(calcZongce(s)-prev)<1e-9 ? rankOf[list[i-1].id] : i+1;
+    }
+  });
+  return list.map(s=>({rank:rankOf[s.id], xh:s.xh, xm:s.xm, s}));
+}
+function r1(v){ return Math.round(v*10)/10; }
+function r2(v){ return Math.round(v*100)/100; }
+function deyuJL(s){
+  const d = s.deyu;
+  return Math.min((Number(d.sixiang)||0)+(Number(d.biaozhang)||0)+Math.min(sum(d.ganbu),10)+Math.min(sum(d.rongyu),10)+(Number(d.custom)||0), 20);
+}
+function zhiyuJL(s){
+  const z = s.zhiyu;
+  return Math.min((Number(z.jingsai)||0)+Math.min(sum(z.jineng),20)+(Number(z.chuangye)||0)+(Number(z.custom)||0), 20);
+}
+function tiyuJL(s){
+  const t = s.tiyu;
+  return Math.min((Number(t.jiangli)||0)+(Number(t.custom)||0), 20);
+}
+function meiyuJL(s){
+  const m = s.meiyu;
+  return Math.min((Number(m.jiangli)||0)+(Number(m.custom)||0), 20);
+}
+function laoyuJL(s){
+  const l = s.laoyu;
+  const zhiyuan = Math.min(Number(l.zhiyuanCishu)||0, 10);
+  return Math.min(zhiyuan+(Number(l.xianxue)||0)*5+(Number(l.qinshi)||0)+(Number(l.shehui)||0)+(Number(l.custom)||0), 20);
+}
+
+// ---------- 数据备份 ----------
+function exportBackup(){
+  if(!students.length){ toast('当前没有数据','err'); return; }
+  const blob = new Blob([JSON.stringify(students,null,2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '综测数据备份.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('已导出数据备份','ok');
+}
+
+// ---------- 模板下载 ----------
+function downloadTemplate(){
+  const rows = [
+    ['学号','姓名','课程名称','学分','课程性质','成绩'],
+    ['2023010101','张三','大学英语','4','必修','88'],
+    ['2023010101','张三','高等数学','5','必修','92'],
+    ['2023010101','张三','心理健康教育','2','限选','85'],
+    ['2023010102','李四','大学英语','4','必修','76'],
+    ['2023010102','李四','高等数学','5','必修','81'],
+    ['2023010102','李四','音乐鉴赏','2','限选','90']
+  ];
+  if(libReady){
+    const wb = XLSX.utils.book_new();
+    const ws1 = XLSX.utils.aoa_to_sheet(rows);
+    ws1['!cols'] = [{wch:14},{wch:10},{wch:16},{wch:6},{wch:10},{wch:6}];
+    XLSX.utils.book_append_sheet(wb, ws1, '课程成绩');
+    const rows2 = [
+      ['学号','姓名','专业成绩（80分制）'],
+      ['2023010101','张三',''],
+      ['2023010102','李四','']
+    ];
+    const ws2 = XLSX.utils.aoa_to_sheet(rows2);
+    ws2['!cols'] = [{wch:14},{wch:10},{wch:20}];
+    XLSX.utils.book_append_sheet(wb, ws2, '直接成绩');
+    XLSX.writeFile(wb, '综测导入模板.xlsx');
+  } else {
+    let csv = '\ufeff学号,姓名,课程名称,学分,课程性质,成绩\n2023010101,张三,大学英语,4,必修,88\n2023010101,张三,高等数学,5,必修,92\n2023010102,李四,音乐鉴赏,2,限选,90\n';
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = '综测导入模板.csv'; a.click();
+    URL.revokeObjectURL(a.href);
+  }
+  toast('模板已下载，请按表头填写');
+}
+
+// ---------- 示例数据 ----------
+function loadDemo(){
+  const d = [
+    ['2023010101','张三', 72.5, '护理2301', '王老师'],
+    ['2023010102','李四', 68.0, '护理2301', '王老师'],
+    ['2023010103','王五', 75.2, '护理2302', '李老师'],
+    ['2023010104','赵六', 64.8, '护理2302', '李老师'],
+    ['2023010105','钱七', 70.1, '护理2302', '李老师']
+  ];
+  students = d.map(([xh,xm,zy,bj,fdy])=>{
+    const s = newStudent(xh, xm, zy, bj, fdy);
+    return s;
+  });
+  // 给部分学生填加分，展示效果
+  const s0 = students[0];
+  s0.deyu = {sixiang:1, biaozhang:0, ganbu:[6,3], rongyu:[4], custom:0};
+  s0.zhiyu = {zhuanye:72.5, jingsai:12, jineng:[4,5], chuangye:0, custom:0};
+  s0.tiyu = {chengji:50, tice:30, jiangli:4, custom:0};
+  s0.meiyu = {jiangli:8, custom:0};
+  s0.laoyu = {zhiyuanCishu:6, xianxue:1, qinshi:5, shehui:4, custom:0};
+  s0.koufen = {chufen:0, richang:0};
+  s0.edited = true;
+  const s1 = students[1];
+  s1.deyu = {sixiang:2, biaozhang:0, ganbu:[3], rongyu:[2], custom:0};
+  s1.zhiyu = {zhuanye:68.0, jingsai:3, jineng:[3], chuangye:0, custom:0};
+  s1.tiyu = {chengji:50, tice:20, jiangli:2, custom:0};
+  s1.meiyu = {jiangli:3, custom:0};
+  s1.laoyu = {zhiyuanCishu:3, xianxue:0, qinshi:0, shehui:2, custom:0};
+  s1.koufen = {chufen:5, richang:3};
+  s1.edited = true;
+  const s2 = students[2];
+  s2.deyu = {sixiang:0, biaozhang:5, ganbu:[2], rongyu:[], custom:0};
+  s2.zhiyu = {zhuanye:75.2, jingsai:0, jineng:[8], chuangye:10, custom:0};
+  s2.tiyu = {chengji:50, tice:30, jiangli:0, custom:0};
+  s2.meiyu = {jiangli:0, custom:0};
+  s2.laoyu = {zhiyuanCishu:12, xianxue:0, qinshi:0, shehui:0, custom:0};
+  s2.koufen = {chufen:0, richang:1};
+  s2.edited = true;
+  save(); renderAll();
+  toast('已填入 5 名示例学生','ok');
+}
+
+// ---------- 事件绑定 ----------
+document.getElementById('proofClose').addEventListener('click', ()=>{
+  document.getElementById('proofOverlay').classList.remove('open');
+});
+document.getElementById('proofDone').addEventListener('click', ()=>{
+  document.getElementById('proofOverlay').classList.remove('open');
+});
+document.getElementById('proofOverlay').addEventListener('click', e=>{
+  if(e.target===document.getElementById('proofOverlay'))
+    document.getElementById('proofOverlay').classList.remove('open');
+});
+document.getElementById('btnImport').addEventListener('click', openImport);
+document.getElementById('btnTemplate').addEventListener('click', downloadTemplate);
+document.getElementById('btnExport').addEventListener('click', openExportDialog);
+document.getElementById('btnDemo').addEventListener('click', loadDemo);
+document.getElementById('btnClear').addEventListener('click', ()=>{
+  if(!students.length) return;
+  if(confirm('确定清空全部学生数据？该操作不可撤销。')){
+    students = []; save(); renderAll(); toast('已清空');
+    idbClearAll();
+  }
+});
+document.getElementById('searchInput').addEventListener('input', renderTable);
+
+// 导出设置弹窗
+document.getElementById('exportClose').addEventListener('click', ()=>{
+  document.getElementById('exportOverlay').classList.remove('open');
+});
+document.getElementById('exportCancel').addEventListener('click', ()=>{
+  document.getElementById('exportOverlay').classList.remove('open');
+});
+document.getElementById('exportConfirm').addEventListener('click', exportXlsx);
+document.getElementById('exportOverlay').addEventListener('click', e=>{
+  if(e.target===document.getElementById('exportOverlay'))
+    document.getElementById('exportOverlay').classList.remove('open');
+});
+
+// 主表按钮
+document.getElementById('tbody').addEventListener('click', e=>{
+  const btn = e.target.closest('[data-act]');
+  if(!btn) return;
+  const id = btn.dataset.id;
+  if(btn.dataset.act==='edit') openEdit(id);
+  else if(btn.dataset.act==='del'){
+    const s = students.find(x=>x.id===id);
+    if(s && confirm('删除 '+s.xh+' '+s.xm+' 的测评数据？')){
+      students = students.filter(x=>x.id!==id);
+      save(); renderAll(); toast('已删除');
+      idbClearProofs(s.xh);
+    }
+  }
+});
+
+// 编辑弹窗
+document.getElementById('editSave').addEventListener('click', ()=>{
+  document.getElementById('editOverlay').classList.remove('open');
+  save(); renderAll(); toast('已保存');
+});
+document.getElementById('editCancel').addEventListener('click', ()=>{
+  document.getElementById('editOverlay').classList.remove('open');
+});
+document.getElementById('editClose').addEventListener('click', ()=>{
+  document.getElementById('editOverlay').classList.remove('open');
+});
+document.getElementById('editOverlay').addEventListener('click', e=>{
+  if(e.target===document.getElementById('editOverlay'))
+    document.getElementById('editOverlay').classList.remove('open');
+});
+
+// 导入弹窗 tabs
+document.querySelectorAll('.tabbtn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tabbtn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.tabpanel').forEach(p=>p.style.display='none');
+    document.getElementById('tab-'+btn.dataset.tab).style.display='block';
+  });
+});
+document.getElementById('importClose').addEventListener('click', ()=>{
+  document.getElementById('importOverlay').classList.remove('open');
+});
+document.getElementById('importCancel').addEventListener('click', ()=>{
+  document.getElementById('importOverlay').classList.remove('open');
+});
+document.getElementById('importConfirm').addEventListener('click', doImport);
+document.getElementById('importOverlay').addEventListener('click', e=>{
+  if(e.target===document.getElementById('importOverlay'))
+    document.getElementById('importOverlay').classList.remove('open');
+});
+
+// 文件上传
+const dz = document.getElementById('dropzone');
+const fi = document.getElementById('fileInput');
+dz.addEventListener('click', ()=>fi.click());
+fi.addEventListener('change', e=>{
+  if(e.target.files[0]) handleFile(e.target.files[0], 'file');
+  fi.value='';
+});
+['dragover','dragenter'].forEach(ev=>dz.addEventListener(ev, e=>{
+  e.preventDefault(); dz.classList.add('drag');
+}));
+['dragleave','drop'].forEach(ev=>dz.addEventListener(ev, e=>{
+  e.preventDefault(); dz.classList.remove('drag');
+}));
+dz.addEventListener('drop', e=>{
+  if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0], 'file');
+});
+
+// 粘贴解析
+const pa = document.getElementById('pasteArea');
+pa.addEventListener('input', ()=>{
+  const text = pa.value.trim();
+  if(!text){ document.getElementById('pastePreview').innerHTML=''; pendingImport=null; return; }
+  const lines = text.split(/\r?\n/).filter(l=>l.trim());
+  const rows = lines.map(l=>l.split(/\t|,/).map(c=>c.trim()));
+  let hi = -1;
+  for(let i=0;i<Math.min(rows.length, 30); i++){
+    const txt = rows[i].join(' ');
+    if(txt.indexOf('学号')>=0 && txt.indexOf('姓名')>=0){ hi = i; break; }
+  }
+  if(hi<0){
+    document.getElementById('pastePreview').innerHTML = '<span class="bad">未找到表头行，请确认首行包含「学号」「姓名」</span>';
+    pendingImport = null;
+    return;
+  }
+  const headers = rows[hi];
+  if(!headers.length){ pendingImport=null; return; }
+  // 自动匹配教学计划：根据首个数据行的班级（如 24软件03班 → 2024级 软件技术）
+  try{
+    const hIdx = {};
+    headers.forEach((h,i)=>{ hIdx[normalizeH(h)] = i; });
+    const bji2 = hIdx['班级']!==undefined ? hIdx['班级'] : (hIdx['班别']!==undefined ? hIdx['班别'] : -1);
+    const firstRow = rows[hi+1] || [];
+    const bjVal = bji2>=0 ? String(firstRow[bji2]===undefined?'':firstRow[bji2]) : '';
+    const ik = inferStudentKey(bjVal);
+    const courseNames = headers.map(h=>{
+      const s=String(h);
+      const m=s.match(/\(学分\s*:\s*([\d.]+)\)/);
+      return m ? s.replace(/\s*\(学分\s*:\s*[\d.]+\)\s*$/, '').trim() : null;
+    }).filter(Boolean);
+    const bp = findBestPlan(ik.grade, ik.kw, courseNames);
+    const sel = document.getElementById('planSelect');
+    if(bp && sel && sel.value!==bp.id){ sel.value = bp.id; updatePlanHint(); }
+  }catch(e){}
+  const result = parseRows(headers, rows.slice(hi+1), currentPlan());
+  if(!result.students.length){
+    document.getElementById('pastePreview').innerHTML = '<span class="bad">未识别到有效数据，请检查表头是否包含「学号」「姓名」</span>';
+    pendingImport = null;
+    return;
+  }
+  pendingImport = result;
+  const modeTxt = result.mode==='wide' ? '教务成绩单模式' : (result.mode==='detail' ? '课程明细模式（自动加权计算专业成绩）' : '直接成绩模式');
+  let pv = '识别到 <b>'+result.students.length+'</b> 名学生 · '+modeTxt;
+  if(result.planUsed) pv += ' · <span class="good">'+esc(result.planUsed)+'</span>';
+  if(result.issues && result.issues.length) pv += ' · <span class="bad">'+result.issues.length+' 条提示</span>';
+  document.getElementById('pastePreview').innerHTML = pv;
+  document.getElementById('importFootHint').textContent = '导入时：学号已存在则更新专业成绩，不存在则新增学生';
+});
+
+// 备份恢复
+const bz = document.getElementById('backupZone');
+const bi = document.getElementById('backupInput');
+bz.addEventListener('click', ()=>bi.click());
+bi.addEventListener('change', e=>{
+  if(e.target.files[0]) handleFile(e.target.files[0], 'backup');
+  bi.value='';
+});
+['dragover','dragenter'].forEach(ev=>bz.addEventListener(ev, e=>{
+  e.preventDefault(); bz.classList.add('drag');
+}));
+['dragleave','drop'].forEach(ev=>bz.addEventListener(ev, e=>{
+  e.preventDefault(); bz.classList.remove('drag');
+}));
+bz.addEventListener('drop', e=>{
+  if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0], 'backup');
+});
+
+// 学生申报
+const az = document.getElementById('applyZone');
+const ai = document.getElementById('applyInput');
+az.addEventListener('click', ()=>ai.click());
+ai.addEventListener('change', e=>{
+  const files = Array.from(e.target.files||[]);
+  if(files.length){
+    Promise.all(files.map(f=>f.text())).then(texts=>{
+      showApplyParsed(texts.join('\n'));
+    }).catch(err=>{
+      document.getElementById('applyPreview').innerHTML = '<span class="bad">读取失败：'+esc(err.message)+'</span>';
+      pendingImport = null;
+    });
+  }
+  ai.value='';
+});
+['dragover','dragenter'].forEach(ev=>az.addEventListener(ev, e=>{
+  e.preventDefault(); az.classList.add('drag');
+}));
+['dragleave','drop'].forEach(ev=>az.addEventListener(ev, e=>{
+  e.preventDefault(); az.classList.remove('drag');
+}));
+az.addEventListener('drop', e=>{
+  const files = Array.from(e.dataTransfer.files||[]).filter(f=>/\.json$/i.test(f.name));
+  if(files.length){
+    Promise.all(files.map(f=>f.text())).then(texts=>{
+      showApplyParsed(texts.join('\n'));
+    }).catch(err=>{
+      document.getElementById('applyPreview').innerHTML = '<span class="bad">读取失败：'+esc(err.message)+'</span>';
+      pendingImport = null;
+    });
+  }
+});
+document.getElementById('applyArea').addEventListener('input', e=>{
+  const text = e.target.value.trim();
+  if(!text){ document.getElementById('applyPreview').innerHTML=''; pendingImport=null; return; }
+  showApplyParsed(text);
+});
+
+// 解析学生申报文本（可含多个 JSON 对象/数组，用括号配平提取完整块）
+function scanJsonObjects(text){
+  const objs = [];
+  let depth = 0, start = -1;
+  for(let i=0;i<text.length;i++){
+    const ch = text[i];
+    if(ch === '{'){
+      if(depth === 0) start = i;
+      depth++;
+    } else if(ch === '}'){
+      depth--;
+      if(depth === 0 && start >= 0){
+        try{
+          const o = JSON.parse(text.slice(start, i+1));
+          objs.push(o);
+        }catch(e){}
+        start = -1;
+      }
+    }
+  }
+  return objs;
+}
+const PROOF_LABEL = {
+  'd-sixiang':'思想进步','d-biaozhang':'见义勇为等表彰','d-ganbu':'团学干部任职','d-rongyu':'荣誉表彰',
+  'z-jingsai':'学科技能竞赛','z-jineng':'职业技能证书','z-chuangye':'创新创业',
+  't-jiangli':'体育获奖','m-jiangli':'文艺竞赛/演出',
+  'l-zhiyuan':'志愿服务','l-xianxue':'无偿献血','l-shehui':'社会实践/表彰','k-chufen':'违纪处分'
+};
+// ===== 证明材料 IndexedDB 存储（容量大，图片不占 localStorage） =====
+const IDB_NAME = 'zongce_proofs_db', IDB_STORE = 'proofs';
+function idbOpen(){
+  return new Promise((res, rej)=>{
+    try{
+      const req = indexedDB.open(IDB_NAME, 1);
+      req.onupgradeneeded = ()=>{ req.result.createObjectStore(IDB_STORE, {keyPath:'id'}); };
+      req.onsuccess = ()=>res(req.result);
+      req.onerror = ()=>rej(req.error);
+    }catch(e){ rej(e); }
+  });
+}
+async function idbPutProofs(xh, proofs){
+  try{
+    const db = await idbOpen();
+    return new Promise((res, rej)=>{
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      Object.keys(proofs).forEach(k=>{
+        tx.objectStore(IDB_STORE).put({id: xh+'_'+k, xh:xh, key:k, name:proofs[k].name||'', data:proofs[k].data||''});
+      });
+      tx.oncomplete = ()=>{ db.close(); res(); };
+      tx.onerror = ()=>{ db.close(); rej(tx.error); };
+    });
+  }catch(e){ return Promise.reject(e); }
+}
+async function idbGetProofs(xh){
+  try{
+    const db = await idbOpen();
+    return new Promise((res, rej)=>{
+      const out = {};
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const store = tx.objectStore(IDB_STORE);
+      const idx = store.index ? null : null;
+      const reqAll = store.getAll();
+      reqAll.onsuccess = ()=>{
+        (reqAll.result||[]).forEach(r=>{ if(r.xh===xh) out[r.key] = {name:r.name, data:r.data}; });
+        db.close(); res(out);
+      };
+      reqAll.onerror = ()=>{ db.close(); rej(reqAll.error); };
+    });
+  }catch(e){ return Promise.resolve({}); }
+}
+async function idbClearProofs(xh){
+  try{
+    const db = await idbOpen();
+    return new Promise((res, rej)=>{
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      const store = tx.objectStore(IDB_STORE);
+      const reqAll = store.getAll();
+      reqAll.onsuccess = ()=>{
+        (reqAll.result||[]).forEach(r=>{ if(r.xh===xh) store.delete(r.id); });
+      };
+      tx.oncomplete = ()=>{ db.close(); res(); };
+      tx.onerror = ()=>{ db.close(); rej(tx.error); };
+    });
+  }catch(e){}
+}
+async function idbClearAll(){
+  try{
+    const db = await idbOpen();
+    return new Promise((res, rej)=>{
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).clear();
+      tx.oncomplete = ()=>{ db.close(); res(); };
+      tx.onerror = ()=>{ db.close(); rej(tx.error); };
+    });
+  }catch(e){}
+}
+function renderProofOverlay(title, proofs){
+  const p = proofs || {};
+  const keys = Object.keys(p);
+  if(!keys.length){ toast('该生未提供证明附件','warn'); return; }
+  document.getElementById('proofTitle').textContent = title;
+  let html = '';
+  keys.forEach(k=>{
+    const v = p[k];
+    html += '<div style="margin-bottom:12px"><b>'+esc(PROOF_LABEL[k]||k)+' · '+esc(v.name||'')+'</b></div>';
+    if(/^data:image\//.test(v.data||'')){
+      html += '<img src="'+v.data+'" style="max-width:100%;max-height:360px;border:1px solid var(--line);border-radius:8px;display:block;margin-bottom:4px">';
+    } else {
+      html += '<div style="padding:8px;background:#f8fafc;border:1px solid var(--line);border-radius:8px;word-break:break-all">'+esc(v.name)+'（非图片文件）</div>';
+    }
+  });
+  document.getElementById('proofBody').innerHTML = html;
+  document.getElementById('proofOverlay').classList.add('open');
+}
+async function viewProofsFromDB(xh, xm){
+  const s = students.find(x=>x.xh===xh);
+  const nm = xm || (s && s.xm) || '';
+  const data = await idbGetProofs(xh);
+  if(!Object.keys(data).length){ toast('该生证明图片未在本机保存（可能导入时未附证明），请用原申报文件重新导入核对','warn'); return; }
+  renderProofOverlay(xh + ' · ' + nm, data);
+}
+function proofCount(s){
+  const p = s.proofs;
+  if(!p) return 0;
+  return Object.keys(p).length;
+}
+function showProofs(s){
+  const p = s.proofs;
+  if(!p || !Object.keys(p).length){ toast('该生未提供证明附件','warn'); return; }
+  renderProofOverlay(s.xh + ' · ' + s.xm, p);
+}
+function applyItem(xh){
+  const r = pendingImport;
+  if(!r || r.mode!=='apply' || !r.students) return {};
+  return r.students.find(s=>s.xh===xh) || {};
+}
+function showApplyParsed(text){
+  const items = [];
+  let parsed = [];
+  try{
+    const whole = JSON.parse(text);
+    parsed.push(whole);
+  }catch(e){
+    parsed = scanJsonObjects(text);
+  }
+  parsed.forEach(obj=>{
+    if(!obj) return;
+    if(Array.isArray(obj)) obj.forEach(o=>{ if(o && o.xh) items.push(o); });
+    else if(obj.items && Array.isArray(obj.items)) obj.items.forEach(o=>{ if(o && o.xh) items.push(o); });
+    else if(obj.xh) items.push(obj);
+  });
+  if(!items.length){
+    document.getElementById('applyPreview').innerHTML = '<span class="bad">未识别到学生申报内容，请确认是「学生填报版」生成的 JSON 文本</span>';
+    pendingImport = null;
+    return;
+  }
+  pendingImport = {mode:'apply', students:items};
+  const noProof = items.filter(s=>proofCount(s)===0).length;
+  let html = '识别到 <b>'+items.length+'</b> 名学生申报：';
+  if(noProof) html += ' · <span class="bad">'+noProof+' 人未附证明</span>';
+  html += '<div class="previewlist"><table><tr><th>学号</th><th>姓名</th><th>内容</th><th>证明</th></tr>';
+  items.slice(0,15).forEach(s=>{
+    const cnt = [];
+    if(s.deyu){ const d=s.deyu; let t=0; if(d.sixiang) t+=(Number(d.sixiang)||0); if(d.biaozhang) t+=(Number(d.biaozhang)||0); if(d.ganbu&&d.ganbu.length) t+=d.ganbu.reduce((a,b)=>a+(Number(b)||0),0); if(d.rongyu&&d.rongyu.length) t+=d.rongyu.reduce((a,b)=>a+(Number(b)||0),0); if(t) cnt.push('德+'+t); }
+    if(s.zhiyu){ const z=s.zhiyu; let t=(Number(z.jingsai)||0); if(z.jineng&&z.jineng.length) t+=z.jineng.reduce((a,b)=>a+(Number(b)||0),0); if(Number(z.chuangye)||0) t+=(Number(z.chuangye)||0); if(t) cnt.push('智+'+t); }
+    if(s.tiyu && (Number(s.tiyu.jiangli)||0)) cnt.push('体+'+s.tiyu.jiangli);
+    if(s.meiyu && (Number(s.meiyu.jiangli)||0)) cnt.push('美+'+s.meiyu.jiangli);
+    if(s.laoyu){ const l=s.laoyu; let t=Math.min(Number(l.zhiyuanCishu)||0,10)+(Number(l.xianxue)||0)*5+(Number(l.qinshi)||0)+(Number(l.shehui)||0); if(t) cnt.push('劳+'+t); }
+    if(s.koufen && (Number(s.koufen.chufen)||0)) cnt.push('扣'+s.koufen.chufen);
+    const pc = proofCount(s);
+    html += '<tr><td>'+esc(s.xh)+'</td><td>'+esc(s.xm||'')+'</td><td>'+(cnt.join('，')||'无加分')+'</td><td>'+
+      (pc ? '<button class="linkbtn" onclick="showProofs(applyItem('+esc(JSON.stringify(s.xh))+'))">'+pc+' 份 查看</button>'
+          : '<span class="bad">无证明</span>')+'</td></tr>';
+  });
+  if(items.length>15) html += '<tr><td colspan="4">…共 '+items.length+' 名</td></tr>';
+  html += '</table></div>';
+  document.getElementById('applyPreview').innerHTML = html;
+  document.getElementById('importFootHint').textContent = '导入时：学号已存在则更新该生申报的加分明细（专业成绩、体育基础分保持不变），不存在则新增学生；导入后仅保存证明文件名（供核查标记），图片请以上方「查看」核对';
+}
+
+// 导出备份入口：加到顶栏
+const backupBtn = document.createElement('button');
+backupBtn.className = 'btn ghost';
+backupBtn.id = 'btnBackup';
+backupBtn.title = '导出数据备份（.json）';
+backupBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>数据备份';
+backupBtn.addEventListener('click', exportBackup);
+document.querySelector('.topbar .actions').appendChild(backupBtn);
+
+// ===== 教学计划事件 =====
+document.getElementById('btnPlan').addEventListener('click', openPlanDialog);
+document.getElementById('planClose').addEventListener('click', closePlanDialog);
+document.getElementById('planDone').addEventListener('click', closePlanDialog);
+document.getElementById('planOverlay').addEventListener('click', e=>{
+  if(e.target===document.getElementById('planOverlay')) closePlanDialog();
+});
+const pz = document.getElementById('planZone');
+const pi = document.getElementById('planInput');
+pz.addEventListener('click', ()=>pi.click());
+pi.addEventListener('change', e=>{
+  if(e.target.files.length) handlePlanFiles(e.target.files);
+  pi.value='';
+});
+['dragover','dragenter'].forEach(ev=>pz.addEventListener(ev, e=>{
+  e.preventDefault(); pz.classList.add('drag');
+}));
+['dragleave','drop'].forEach(ev=>pz.addEventListener(ev, e=>{
+  e.preventDefault(); pz.classList.remove('drag');
+}));
+pz.addEventListener('drop', e=>{
+  if(e.dataTransfer.files.length) handlePlanFiles(e.dataTransfer.files);
+});
+document.getElementById('planClear').addEventListener('click', ()=>{
+  if(!PLANS.length){ toast('教学计划库为空'); return; }
+  if(confirm('确定清空全部教学计划？')){
+    PLANS = []; savePlans(); renderPlans(); renderPlanSelect(); toast('已清空教学计划');
+  }
+});
+document.getElementById('planSelect').addEventListener('change', ()=>{
+  updatePlanHint();
+  const fp = document.getElementById('filePreview');
+  if(fp && fp.textContent.trim()) fp.innerHTML = '';
+  const pp = document.getElementById('pastePreview');
+  if(pp && pp.textContent.trim()) pp.innerHTML = '';
+  pendingImport = null;
+  toast('已切换匹配教学计划，请重新选择文件或粘贴数据');
+});
+
+// ---------- 初始化 ----------
+function init(){
+  load();
+  loadPlans();
+  renderPlanSelect();
+  // 统计导出组件加载状态
+  setTimeout(()=>{ libReady = typeof XLSX !== 'undefined'; }, 800);
+  renderAll();
+}
+init();
+</script>
+</body>
+</html>
