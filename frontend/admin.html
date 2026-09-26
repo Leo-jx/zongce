@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>综测系统 · 超级管理员端</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%231b5fa8'/%3E%3Ctext x='12' y='17' font-size='13' fill='%23fff' text-anchor='middle' font-family='sans-serif' font-weight='bold'%3E管%3C/text%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#f2f5f9; --card:#ffffff; --line:#e3e8ef; --line-strong:#c9d3e0;
+  --ink:#1f2d3d; --ink-2:#52657a; --ink-3:#8a9bad;
+  --primary:#1b5fa8; --primary-2:#2f7fd1; --primary-bg:#eaf2fb;
+  --good:#1a7f4b; --warn:#b3541e; --bad:#b3362f;
+  --radius:10px; --shadow:0 1px 3px rgba(31,45,61,.08),0 4px 16px rgba(31,45,61,.06);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.55}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit}
+.wrap{max-width:1280px;margin:0 auto;padding:16px 20px 60px}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:linear-gradient(120deg,#16365f 0%,#1b5fa8 60%,#2f7fd1 100%);color:#fff;border-radius:14px;padding:18px 22px;box-shadow:var(--shadow)}
+.topbar h1{font-size:20px;font-weight:700}
+.topbar .sub{font-size:12.5px;opacity:.85;margin-top:3px}
+.btn{border:1px solid var(--line-strong);background:#fff;color:var(--ink);border-radius:8px;padding:7px 14px;font-size:13px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn:hover{border-color:var(--primary);color:var(--primary)}
+.btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+.btn.primary:hover{background:var(--primary-2);color:#fff}
+.btn.ghost{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.35);color:#fff}
+.btn.danger{background:var(--bad);border-color:var(--bad);color:#fff}
+.btn.sm{padding:4px 10px;font-size:12px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:14px 0}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:12px 16px;box-shadow:var(--shadow)}
+.stat .num{font-size:22px;font-weight:700;color:var(--primary)}
+.stat .lab{font-size:12px;color:var(--ink-2);margin-top:2px}
+.stat.good .num{color:var(--good)}
+.tabbar{display:flex;gap:6px;border-bottom:1px solid var(--line);margin:14px 0;flex-wrap:wrap}
+.tabbtn{border:0;background:transparent;padding:9px 16px;font-size:13.5px;color:var(--ink-2);border-bottom:2px solid transparent}
+.tabbtn.active{color:var(--primary);border-bottom-color:var(--primary);font-weight:600}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;margin-bottom:14px}
+.card h3{font-size:15px;margin-bottom:10px;color:var(--primary)}
+.formrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.formrow input,.formrow select{border:1px solid var(--line-strong);border-radius:8px;padding:7px 10px;font-size:13px}
+.formrow input:focus,.formrow select:focus{outline:0;border-color:var(--primary)}
+.hint{font-size:12px;color:var(--ink-3);margin-top:8px}
+table.grid{width:100%;border-collapse:collapse;font-size:13px}
+table.grid th{background:#f6f8fb;color:var(--ink-2);font-weight:600;font-size:12px;padding:9px 8px;border-bottom:1px solid var(--line-strong);text-align:left;white-space:nowrap}
+table.grid td{padding:8px;border-bottom:1px solid var(--line);vertical-align:middle}
+table.grid tbody tr:hover{background:#f7fafd}
+.tblwrap{overflow-x:auto}
+.empty{padding:24px;text-align:center;color:var(--ink-3);font-size:13px}
+.tag{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11.5px;border:1px solid transparent}
+.tag.on{background:#e7f6ed;color:var(--good);border-color:#bfe3ce}
+.tag.off{background:#fdeceb;color:var(--bad);border-color:#f3c9c6}
+.tag.role{background:var(--primary-bg);color:var(--primary);border-color:#cfe0f3}
+.permgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px 14px;margin-top:4px}
+.permgrid label{display:flex;align-items:center;gap:6px;font-size:13px}
+.overlay{position:fixed;inset:0;background:rgba(15,23,32,.45);display:none;align-items:center;justify-content:center;z-index:100;padding:16px}
+.overlay.show{display:flex}
+.dialog{background:#fff;border-radius:12px;width:100%;max-width:560px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.dialog .head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--line)}
+.dialog .head h2{font-size:16px}
+.dialog .body{padding:16px 18px;overflow:auto}
+.dialog .foot{padding:12px 18px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px}
+.fld{margin-bottom:12px}
+.fld label{display:block;font-size:12.5px;color:var(--ink-2);margin-bottom:4px}
+.fld input,.fld select,.fld textarea{width:100%;border:1px solid var(--line-strong);border-radius:8px;padding:8px 10px;font-size:13px}
+.fld input:focus,.fld select:focus,.fld textarea:focus{outline:0;border-color:var(--primary)}
+.toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(20px);background:#1f2d3d;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;opacity:0;pointer-events:none;transition:all .25s;z-index:200}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.err{background:var(--bad)}.toast.ok{background:var(--good)}
+.hidden{display:none!important}
+.login-wrap{max-width:400px;margin:80px auto;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:28px 24px;box-shadow:var(--shadow)}
+.login-wrap h2{text-align:center;color:var(--primary);margin-bottom:18px}
+.login-wrap input{width:100%;border:1px solid var(--line-strong);border-radius:8px;padding:10px 12px;font-size:14px;margin-bottom:14px}
+</style>
+</head>
+<body>
+
+<div id="mainPage" class="wrap hidden">
+  <header class="topbar">
+    <div>
+      <h1>综测系统 · 超级管理员端</h1>
+      <div class="sub">角色权限配置 · 班级 / 教师 / 学生 / 账号全量管理 · <span id="adminName"></span></div>
+    </div>
+    <div><button class="btn ghost" id="btnLogout">退出登录</button></div>
+  </header>
+
+  <div class="tabbar" id="mainTabs">
+    <button class="tabbtn active" data-tab="overview">概览</button>
+    <button class="tabbtn" data-tab="perms">角色权限</button>
+    <button class="tabbtn" data-tab="classes">班级管理</button>
+    <button class="tabbtn" data-tab="teachers">教师管理</button>
+    <button class="tabbtn" data-tab="students">学生管理</button>
+    <button class="tabbtn" data-tab="accounts">账号管理</button>
+    <button class="tabbtn" data-tab="attendance">考勤查询</button>
+  </div>
+
+  <div id="tab-overview">
+    <div class="stats" id="ovStats"></div>
+  </div>
+
+  <div id="tab-perms" class="hidden">
+    <div class="card">
+      <h3>角色权限配置</h3>
+      <div class="hint" style="margin:0 0 10px">勾选后点击「保存」生效。新增角色 / 新增权限点只需在后端 <code>src/rbac.js</code> 的 PERMISSION_DEFS 中登记即可自动出现。</div>
+      <div class="tblwrap"><table class="grid" id="permTable"></table></div>
+      <div class="formrow" style="margin-top:12px"><button class="btn primary" id="btnSavePerms">保存权限配置</button></div>
+    </div>
+  </div>
+
+  <div id="tab-classes" class="hidden">
+    <div class="card">
+      <h3>新增班级</h3>
+      <div class="formrow">
+        <input id="clsName" placeholder="班级名称，如 护理2301">
+        <input id="clsTeacher" placeholder="辅导员教师号，如 T001">
+        <input id="clsMajor" placeholder="专业">
+        <input id="clsGrade" placeholder="年级">
+        <button class="btn primary" id="btnAddClass">新增</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>班级列表</h3>
+      <div class="tblwrap"><table class="grid" id="classTable"></table></div>
+    </div>
+  </div>
+
+  <div id="tab-teachers" class="hidden">
+    <div class="card">
+      <h3>新增辅导员 / 教师</h3>
+      <div class="formrow">
+        <input id="tchAccount" placeholder="教师号，如 T003">
+        <input id="tchName" placeholder="姓名">
+        <input id="tchPwd" placeholder="初始密码（默认 123456）">
+        <button class="btn primary" id="btnAddTeacher">新增</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>教师列表</h3>
+      <div class="tblwrap"><table class="grid" id="teacherTable"></table></div>
+    </div>
+  </div>
+
+  <div id="tab-students" class="hidden">
+    <div class="card">
+      <h3>学生名单</h3>
+      <div class="formrow">
+        <input id="stuKeyword" placeholder="学号 / 姓名">
+        <select id="stuClassFilter"><option value="">全部班级</option></select>
+        <button class="btn" id="btnSearchStudent">查询</button>
+        <button class="btn primary" id="btnAddStudent">新增学生</button>
+      </div>
+      <div class="tblwrap" style="margin-top:12px"><table class="grid" id="studentTable"></table></div>
+    </div>
+  </div>
+
+  <div id="tab-accounts" class="hidden">
+    <div class="card">
+      <h3>新增账号</h3>
+      <div class="formrow">
+        <input id="accAccount" placeholder="账号">
+        <input id="accName" placeholder="姓名">
+        <input id="accPwd" placeholder="初始密码（默认 123456）">
+        <select id="accRole">
+          <option value="admin">超级管理员</option>
+          <option value="teacher" selected>辅导员 / 教师</option>
+          <option value="student">学生</option>
+        </select>
+        <button class="btn primary" id="btnAddAccount">新增</button>
+      </div>
+      <div class="hint">新增时可按下方权限清单为其单独授权；不勾选则继承该角色的默认权限。</div>
+      <div class="permgrid" id="accPermGrid"></div>
+    </div>
+    <div class="card">
+      <h3>账号列表</h3>
+      <div class="tblwrap"><table class="grid" id="accountTable"></table></div>
+    </div>
+  </div>
+
+  <div id="tab-attendance" class="hidden">
+    <div class="card">
+      <h3>考勤查询</h3>
+      <div class="formrow">
+        <input type="date" id="attDate">
+        <input id="attXh" placeholder="学号（可选）">
+        <button class="btn" id="btnSearchAtt">查询</button>
+      </div>
+      <div class="tblwrap" style="margin-top:12px"><table class="grid" id="attTable"></table></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="dlg">
+  <div class="dialog">
+    <div class="head"><h2 id="dlgTitle">编辑</h2><button class="btn sm" id="dlgClose">×</button></div>
+    <div class="body" id="dlgBody"></div>
+    <div class="foot"><button class="btn" id="dlgCancel">取消</button><button class="btn primary" id="dlgSave">保存</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script>
+const API = window.API_BASE || '';
+let TOKEN = '', USER = null, PERMS = [];
+let PERM_DEFS = [], ROLES = [], CLASSES = [];
+
+const ROLE_LABEL = { student: '学生', teacher: '辅导员 / 教师', admin: '超级管理员' };
+const ATT_LABEL = { present: '出勤', late: '迟到', absent: '缺勤', leave: '请假' };
+
+function esc(x){return String(x==null?'':x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+let toastTimer=null;
+function toast(msg,type){const t=document.getElementById('toast');t.textContent=msg;t.className='toast show'+(type?' '+type:'');clearTimeout(toastTimer);toastTimer=setTimeout(()=>{t.className='toast';},2600);}
+
+async function req(url,method,body){
+  const opt={method,headers:{'Authorization':'Bearer '+TOKEN}};
+  if(body!==undefined){opt.headers['Content-Type']='application/json';opt.body=JSON.stringify(body);}
+  const r=await fetch(API+url,opt);
+  let d=null; try{d=await r.json();}catch(e){}
+  if(!d) return {code:1,msg:'请求失败'};
+  if(d.code===401){doLogout();return d;}
+  return d;
+}
+const apiGet=u=>req(u,'GET');
+const apiPost=(u,b)=>req(u,'POST',b);
+const apiPut=(u,b)=>req(u,'PUT',b);
+const apiDel=u=>req(u,'DELETE');
+
+/* ============ 会话 ============ */
+function doLogout(){
+  ZCAuth.clearSession();
+  ZCAuth.goLogin();
+}
+function enterMain(){
+  document.getElementById('mainPage').classList.remove('hidden');
+  document.getElementById('adminName').textContent=USER.name;
+  loadOverview();loadPerms();loadClasses();
+}
+
+/* ============ 通用弹窗 ============ */
+let dlgSaveHandler=null;
+function openDialog(title,fields,values,onSave){
+  document.getElementById('dlgTitle').textContent=title;
+  const body=document.getElementById('dlgBody');
+  body.innerHTML=fields.map(f=>{
+    const v=values[f.key]==null?'':values[f.key];
+    let input;
+    if(f.type==='select'){
+      input='<select id="fld_'+f.key+'">'+f.options.map(o=>'<option value="'+esc(o.value)+'"'+(String(v)===String(o.value)?' selected':'')+'>'+esc(o.text)+'</option>').join('')+'</select>';
+    }else if(f.type==='textarea'){
+      input='<textarea id="fld_'+f.key+'" rows="4">'+esc(v)+'</textarea>';
+    }else if(f.type==='checkbox'){
+      input='<div class="permgrid">'+f.options.map(o=>'<label><input type="checkbox" id="fld_'+f.key+'_'+o.key+'" value="'+esc(o.key)+'"'+(Array.isArray(v)&&v.indexOf(o.key)>=0?' checked':'')+'><span>'+esc(o.text)+'</span></label>').join('')+'</div>';
+    }else{
+      input='<input id="fld_'+f.key+'" type="'+(f.type||'text')+'" value="'+esc(v)+'">';
+    }
+    return '<div class="fld"><label>'+esc(f.label)+(f.required?' *':'')+'</label>'+input+'</div>';
+  }).join('');
+  dlgSaveHandler=()=>{
+    const out={};
+    for(const f of fields){
+      if(f.type==='checkbox'){
+        out[f.key]=f.options.map(o=>document.getElementById('fld_'+f.key+'_'+o.key)).filter(el=>el&&el.checked).map(el=>el.value);
+      }else{
+        const el=document.getElementById('fld_'+f.key);
+        if(!el) continue;
+        out[f.key]= f.type==='number' ? Number(el.value||0) : el.value.trim();
+        if(f.required && out[f.key]===''){toast('请填写：'+f.label,'err');return;}
+      }
+    }
+    onSave(out);
+  };
+  document.getElementById('dlg').classList.add('show');
+}
+function closeDialog(){document.getElementById('dlg').classList.remove('show');dlgSaveHandler=null;}
+
+/* ============ 概览 ============ */
+async function loadOverview(){
+  const r=await apiGet('/api/admin/overview');
+  if(r.code!==0) return;
+  const d=r.data;
+  const items=[['班级数',d.classes],['学生数',d.students],['教师数',d.teachers],['待审申请',d.pendingApplications],['今日考勤记录',d.attendanceToday]];
+  document.getElementById('ovStats').innerHTML=items.map(i=>'<div class="stat"><div class="num">'+esc(i[1])+'</div><div class="lab">'+esc(i[0])+'</div></div>').join('');
+}
+
+/* ============ 角色权限 ============ */
+async function loadPerms(){
+  const r=await apiGet('/api/admin/permissions');
+  if(r.code!==0){toast(r.msg,'err');return;}
+  PERM_DEFS=r.data.permissions;ROLES=r.data.roles;
+  const permOpts=PERM_DEFS.map(p=>({key:p.key,text:p.label}));
+  if(document.getElementById('accPermGrid').innerHTML===''){
+    document.getElementById('accPermGrid').innerHTML=PERM_DEFS.map(p=>'<label><input type="checkbox" class="acc-perm" value="'+esc(p.key)+'"><span>'+esc(p.label)+'</span></label>').join('');
+  }
+  let html='<thead><tr><th>权限点</th><th>分组</th>'+ROLES.map(ro=>'<th>'+esc(ro.label)+'（'+esc(ro.key)+'）</th>').join('')+'</tr></thead><tbody>';
+  const groups=[...new Set(PERM_DEFS.map(p=>p.group))];
+  for(const g of groups){
+    for(const p of PERM_DEFS.filter(x=>x.group===g)){
+      html+='<tr><td>'+esc(p.label)+'</td><td style="color:var(--ink-3)">'+esc(p.group)+'</td>';
+      for(const ro of ROLES){
+        const checked=ro.permissions.indexOf(p.key)>=0;
+        const lock=ro.key==='admin'&&p.key==='permission:manage';
+        html+='<td><input type="checkbox" data-role="'+esc(ro.key)+'" data-perm="'+esc(p.key)+'"'+(checked?' checked':'')+(lock?' disabled title="超级管理员必须保留该项"':'')+'></td>';
+      }
+      html+='</tr>';
+    }
+  }
+  html+='</tbody>';
+  document.getElementById('permTable').innerHTML=html;
+}
+async function savePerms(){
+  for(const ro of ROLES){
+    const boxes=[...document.querySelectorAll('#permTable input[data-role="'+ro.key+'"]')];
+    const picked=boxes.filter(b=>b.checked||b.disabled).map(b=>b.dataset.perm);
+    const r=await apiPut('/api/admin/permissions',{role:ro.key,permissions:picked});
+    if(r.code!==0){toast(ro.label+' 保存失败：'+r.msg,'err');return;}
+  }
+  toast('权限配置已保存','ok');
+  loadPerms();
+}
+
+/* ============ 班级 ============ */
+async function loadClasses(){
+  const r=await apiGet('/api/teacher/classes');
+  if(r.code!==0){toast(r.msg,'err');return;}
+  CLASSES=r.data;
+  const sel=document.getElementById('stuClassFilter');
+  sel.innerHTML='<option value="">全部班级</option>'+CLASSES.map(c=>'<option value="'+c.id+'">'+esc(c.name)+'</option>').join('');
+  let html='<thead><tr><th>班级</th><th>辅导员</th><th>专业</th><th>年级</th><th>学生数</th><th>操作</th></tr></thead><tbody>';
+  if(!CLASSES.length) html+='<tr><td colspan="6" class="empty">暂无班级</td></tr>';
+  for(const c of CLASSES){
+    html+='<tr><td>'+esc(c.name)+'</td><td>'+esc(c.teacher_account)+'</td><td>'+esc(c.major)+'</td><td>'+esc(c.grade)+'</td><td>'+esc(c.student_count)+'</td>'+
+      '<td><button class="btn sm" data-edit-cls="'+c.id+'">编辑</button> <button class="btn sm danger" data-del-cls="'+c.id+'">删除</button></td></tr>';
+  }
+  html+='</tbody>';
+  document.getElementById('classTable').innerHTML=html;
+  document.querySelectorAll('[data-edit-cls]').forEach(b=>b.onclick=()=>{
+    const c=CLASSES.find(x=>String(x.id)===b.dataset.editCls);
+    openDialog('编辑班级',[
+      {key:'name',label:'班级名称',required:true},
+      {key:'teacher_account',label:'辅导员教师号',required:true},
+      {key:'major',label:'专业'},
+      {key:'grade',label:'年级'}
+    ],c,async v=>{
+      const r=await apiPut('/api/teacher/classes/'+c.id,v);
+      toast(r.msg,r.code===0?'ok':'err');closeDialog();loadClasses();
+    });
+  });
+  document.querySelectorAll('[data-del-cls]').forEach(b=>b.onclick=async()=>{
+    if(!confirm('确认删除该班级？班级下不能有学生。'))return;
+    const r=await apiDel('/api/teacher/classes/'+b.dataset.delCls);
+    toast(r.msg,r.code===0?'ok':'err');loadClasses();
+  });
+}
+
+/* ============ 教师 ============ */
+async function loadTeachers(){
+  const r=await apiGet('/api/admin/accounts?role=teacher');
+  if(r.code!==0){toast(r.msg,'err');return;}
+  let html='<thead><tr><th>教师号</th><th>姓名</th><th>状态</th><th>所带班级</th><th>权限数</th><th>操作</th></tr></thead><tbody>';
+  if(!r.data.length) html+='<tr><td colspan="6" class="empty">暂无教师</td></tr>';
+  for(const t of r.data){
+    const cls=CLASSES.filter(c=>c.teacher_account===t.account).map(c=>c.name).join('、')||'—';
+    html+='<tr><td>'+esc(t.account)+'</td><td>'+esc(t.name)+'</td><td><span class="tag '+(t.status?'on':'off')+'">'+(t.status?'启用':'停用')+'</span></td>'+
+      '<td>'+esc(cls)+'</td><td>'+esc((t.permissions||[]).length)+'</td>'+
+      '<td><button class="btn sm" data-edit-t="'+t.id+'">编辑</button> <button class="btn sm" data-pwd-t="'+t.id+'">重置密码</button> <button class="btn sm danger" data-del-t="'+t.id+'">删除</button></td></tr>';
+  }
+  html+='</tbody>';
+  document.getElementById('teacherTable').innerHTML=html;
+  document.querySelectorAll('[data-edit-t]').forEach(b=>b.onclick=()=>{
+    const t=r.data.find(x=>String(x.id)===b.dataset.editT);
+    openDialog('编辑教师',[
+      {key:'account',label:'教师号',required:true},
+      {key:'name',label:'姓名',required:true},
+      {key:'status',label:'状态',type:'select',options:[{value:1,text:'启用'},{value:0,text:'停用'}]},
+      {key:'permissions',label:'权限',type:'checkbox',options:PERM_DEFS.map(p=>({key:p.key,text:p.label}))}
+    ],{account:t.account,name:t.name,status:t.status,permissions:t.permissions},async v=>{
+      const r2=await apiPut('/api/admin/accounts/'+t.id,{name:v.name,status:Number(v.status),permissions:v.permissions});
+      toast(r2.msg,r2.code===0?'ok':'err');closeDialog();loadTeachers();
+    });
+  });
+  document.querySelectorAll('[data-pwd-t]').forEach(b=>b.onclick=async()=>{
+    const p=prompt('输入新密码（留空则重置为 123456）：');
+    if(p===null)return;
+    const r2=await apiPut('/api/admin/accounts/'+b.dataset.pwdT,{password:p||'123456'});
+    toast(r2.msg,r2.code===0?'ok':'err');
+  });
+  document.querySelectorAll('[data-del-t]').forEach(b=>b.onclick=async()=>{
+    if(!confirm('确认删除该教师账号？'))return;
+    const r2=await apiDel('/api/admin/accounts/'+b.dataset.delT);
+    toast(r2.msg,r2.code===0?'ok':'err');loadTeachers();
+  });
+}
+
+/* ============ 学生 ============ */
+async function loadStudents(){
+  const kw=document.getElementById('stuKeyword').value.trim();
+  const cid=document.getElementById('stuClassFilter').value;
+  let url='/api/teacher/students?';
+  if(cid) url+='class_id='+encodeURIComponent(cid)+'&';
+  if(kw) url+='xm='+encodeURIComponent(kw)+'&';
+  const r=await apiGet(url);
+  if(r.code!==0){toast(r.msg,'err');return;}
+  let html='<thead><tr><th>学号</th><th>姓名</th><th>专业</th><th>班级</th><th>辅导员</th><th>学业成绩</th><th>操作</th></tr></thead><tbody>';
+  if(!r.data.length) html+='<tr><td colspan="7" class="empty">暂无学生</td></tr>';
+  for(const s of r.data){
+    html+='<tr><td>'+esc(s.xh)+'</td><td>'+esc(s.xm)+'</td><td>'+esc(s.zhuanye)+'</td><td>'+esc(s.bj)+'</td><td>'+esc(s.fdy)+'</td><td>'+esc(s.zhuanye_score)+'</td>'+
+      '<td><button class="btn sm" data-edit-s="'+esc(s.xh)+'">编辑</button> <button class="btn sm danger" data-del-s="'+esc(s.xh)+'">删除</button></td></tr>';
+  }
+  html+='</tbody>';
+  document.getElementById('studentTable').innerHTML=html;
+  document.querySelectorAll('[data-edit-s]').forEach(b=>b.onclick=()=>{
+    const s=r.data.find(x=>x.xh===b.dataset.editS);
+    openDialog('编辑学生',[
+      {key:'xm',label:'姓名',required:true},
+      {key:'zhuanye',label:'专业'},
+      {key:'class_id',label:'班级',type:'select',options:[{value:'',text:'— 未分配 —'}].concat(CLASSES.map(c=>({value:c.id,text:c.name})))},
+      {key:'zhuanye_score',label:'学业成绩',type:'number'}
+    ],s,async v=>{
+      const payload={xm:v.xm,zhuanye:v.zhuanye,zhuanye_score:v.zhuanye_score};
+      if(v.class_id) payload.class_id=Number(v.class_id);
+      const r2=await apiPut('/api/teacher/students/'+encodeURIComponent(s.xh),payload);
+      toast(r2.msg,r2.code===0?'ok':'err');closeDialog();loadStudents();
+    });
+  });
+  document.querySelectorAll('[data-del-s]').forEach(b=>b.onclick=async()=>{
+    if(!confirm('确认删除该学生？其申请与考勤记录将一并删除。'))return;
+    const r2=await apiDel('/api/teacher/students/'+encodeURIComponent(b.dataset.delS));
+    toast(r2.msg,r2.code===0?'ok':'err');loadStudents();
+  });
+}
+
+/* ============ 账号 ============ */
+async function loadAccounts(){
+  const r=await apiGet('/api/admin/accounts');
+  if(r.code!==0){toast(r.msg,'err');return;}
+  let html='<thead><tr><th>账号</th><th>姓名</th><th>角色</th><th>状态</th><th>权限数</th><th>操作</th></tr></thead><tbody>';
+  for(const a of r.data){
+    html+='<tr><td>'+esc(a.account)+'</td><td>'+esc(a.name)+'</td><td><span class="tag role">'+esc(ROLE_LABEL[a.role]||a.role)+'</span></td>'+
+      '<td><span class="tag '+(a.status?'on':'off')+'">'+(a.status?'启用':'停用')+'</span></td><td>'+esc((a.permissions||[]).length)+'</td>'+
+      '<td><button class="btn sm" data-edit-a="'+a.id+'">编辑</button> <button class="btn sm danger" data-del-a="'+a.id+'">删除</button></td></tr>';
+  }
+  html+='</tbody>';
+  document.getElementById('accountTable').innerHTML=html;
+  document.querySelectorAll('[data-edit-a]').forEach(b=>b.onclick=()=>{
+    const a=r.data.find(x=>String(x.id)===b.dataset.editA);
+    openDialog('编辑账号',[
+      {key:'name',label:'姓名',required:true},
+      {key:'role',label:'角色',type:'select',options:Object.keys(ROLE_LABEL).map(k=>({value:k,text:ROLE_LABEL[k]}))},
+      {key:'status',label:'状态',type:'select',options:[{value:1,text:'启用'},{value:0,text:'停用'}]},
+      {key:'permissions',label:'权限',type:'checkbox',options:PERM_DEFS.map(p=>({key:p.key,text:p.label}))}
+    ],{name:a.name,role:a.role,status:a.status,permissions:a.permissions},async v=>{
+      const r2=await apiPut('/api/admin/accounts/'+a.id,{name:v.name,role:v.role,status:Number(v.status),permissions:v.permissions});
+      toast(r2.msg,r2.code===0?'ok':'err');closeDialog();loadAccounts();
+    });
+  });
+  document.querySelectorAll('[data-del-a]').forEach(b=>b.onclick=async()=>{
+    if(!confirm('确认删除该账号？'))return;
+    const r2=await apiDel('/api/admin/accounts/'+b.dataset.delA);
+    toast(r2.msg,r2.code===0?'ok':'err');loadAccounts();
+  });
+}
+
+/* ============ 考勤查询 ============ */
+async function loadAttendance(){
+  const date=document.getElementById('attDate').value;
+  const xh=document.getElementById('attXh').value.trim();
+  let url='/api/teacher/attendance?';
+  if(date) url+='date='+encodeURIComponent(date)+'&';
+  if(xh) url+='xh='+encodeURIComponent(xh)+'&';
+  const r=await apiGet(url);
+  if(r.code!==0){toast(r.msg,'err');return;}
+  let html='<thead><tr><th>日期</th><th>学号</th><th>姓名</th><th>班级</th><th>状态</th><th>备注</th><th>登记人</th></tr></thead><tbody>';
+  if(!r.data.length) html+='<tr><td colspan="7" class="empty">暂无考勤记录</td></tr>';
+  for(const a of r.data){
+    html+='<tr><td>'+esc(a.date)+'</td><td>'+esc(a.xh)+'</td><td>'+esc(a.xm)+'</td><td>'+esc(a.bj)+'</td><td>'+esc(ATT_LABEL[a.status]||a.status)+'</td><td>'+esc(a.remark)+'</td><td>'+esc(a.created_by)+'</td></tr>';
+  }
+  html+='</tbody>';
+  document.getElementById('attTable').innerHTML=html;
+}
+
+/* ============ 事件绑定 ============ */
+document.getElementById('btnLogout').addEventListener('click',doLogout);
+document.getElementById('dlgClose').addEventListener('click',closeDialog);
+document.getElementById('dlgCancel').addEventListener('click',closeDialog);
+document.getElementById('dlgSave').addEventListener('click',()=>{if(dlgSaveHandler)dlgSaveHandler();});
+document.getElementById('btnSavePerms').addEventListener('click',savePerms);
+
+document.getElementById('btnAddClass').addEventListener('click',async()=>{
+  const name=document.getElementById('clsName').value.trim();
+  const teacher=document.getElementById('clsTeacher').value.trim();
+  if(!name||!teacher){toast('班级名称与辅导员教师号必填','err');return;}
+  const r=await apiPost('/api/teacher/classes',{name,teacher_account:teacher,major:document.getElementById('clsMajor').value.trim(),grade:document.getElementById('clsGrade').value.trim()});
+  toast(r.msg,r.code===0?'ok':'err');
+  if(r.code===0){['clsName','clsMajor','clsGrade'].forEach(i=>document.getElementById(i).value='');loadClasses();}
+});
+
+document.getElementById('btnAddTeacher').addEventListener('click',async()=>{
+  const account=document.getElementById('tchAccount').value.trim();
+  const name=document.getElementById('tchName').value.trim();
+  if(!account||!name){toast('教师号与姓名必填','err');return;}
+  const r=await apiPost('/api/admin/accounts',{account,name,role:'teacher',password:document.getElementById('tchPwd').value.trim()||'123456'});
+  toast(r.msg,r.code===0?'ok':'err');
+  if(r.code===0){['tchAccount','tchName','tchPwd'].forEach(i=>document.getElementById(i).value='');loadTeachers();}
+});
+
+document.getElementById('btnAddAccount').addEventListener('click',async()=>{
+  const account=document.getElementById('accAccount').value.trim();
+  const name=document.getElementById('accName').value.trim();
+  if(!account||!name){toast('账号与姓名必填','err');return;}
+  const perms=[...document.querySelectorAll('.acc-perm:checked')].map(c=>c.value);
+  const r=await apiPost('/api/admin/accounts',{account,name,role:document.getElementById('accRole').value,password:document.getElementById('accPwd').value.trim()||'123456',permissions:perms});
+  toast(r.msg,r.code===0?'ok':'err');
+  if(r.code===0){['accAccount','accName','accPwd'].forEach(i=>document.getElementById(i).value='');document.querySelectorAll('.acc-perm').forEach(c=>c.checked=false);loadAccounts();}
+});
+
+document.getElementById('btnAddStudent').addEventListener('click',()=>{
+  openDialog('新增学生',[
+    {key:'xh',label:'学号',required:true},
+    {key:'xm',label:'姓名',required:true},
+    {key:'zhuanye',label:'专业'},
+    {key:'class_id',label:'班级',type:'select',options:[{value:'',text:'— 未分配 —'}].concat(CLASSES.map(c=>({value:c.id,text:c.name})))},
+    {key:'zhuanye_score',label:'学业成绩',type:'number'}
+  ],{zhuanye_score:80},async v=>{
+    const payload={xh:v.xh,xm:v.xm,zhuanye:v.zhuanye,zhuanye_score:v.zhuanye_score};
+    if(v.class_id) payload.class_id=Number(v.class_id);
+    const r=await apiPost('/api/teacher/students',payload);
+    toast(r.msg,r.code===0?'ok':'err');closeDialog();loadStudents();
+  });
+});
+document.getElementById('btnSearchStudent').addEventListener('click',loadStudents);
+document.getElementById('btnSearchAtt').addEventListener('click',loadAttendance);
+
+document.querySelectorAll('#mainTabs .tabbtn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('#mainTabs .tabbtn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    const t=btn.dataset.tab;
+    ['overview','perms','classes','teachers','students','accounts','attendance'].forEach(x=>{
+      document.getElementById('tab-'+x).classList.toggle('hidden',x!==t);
+    });
+    if(t==='perms')loadPerms();
+    if(t==='classes')loadClasses();
+    if(t==='teachers')loadTeachers();
+    if(t==='students')loadStudents();
+    if(t==='accounts')loadAccounts();
+    if(t==='attendance')loadAttendance();
+    if(t==='overview')loadOverview();
+  });
+});
+
+// 会话由统一登录页写入，缺失或角色不符时自动跳转
+(function(){
+  const session=ZCAuth.requireRole(['admin']);
+  if(session){
+    TOKEN=session.token;
+    USER=session.user;
+    PERMS=session.user.permissions||[];
+    enterMain();
+  }
+})();
+</script>
+</body>
+</html>

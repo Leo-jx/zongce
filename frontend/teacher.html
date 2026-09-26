@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>学生综合素质测评计算工具</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%231b5fa8'/%3E%3Ctext x='12' y='17' font-size='13' fill='%23fff' text-anchor='middle' font-family='sans-serif' font-weight='bold'%3E综%3C/text%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#f2f5f9; --card:#ffffff; --line:#e3e8ef; --line-strong:#c9d3e0;
+  --ink:#1f2d3d; --ink-2:#52657a; --ink-3:#8a9bad;
+  --primary:#1b5fa8; --primary-2:#2f7fd1; --primary-bg:#eaf2fb;
+  --good:#1a7f4b; --warn:#b3541e; --bad:#b3362f;
+  --mod-de:#2f7fd1; --mod-zhi:#7a5af0; --mod-ti:#0e9f8b; --mod-mei:#d45a8a; --mod-lao:#b3801f; --mod-ko:#b3362f;
+  --radius:10px; --shadow:0 1px 3px rgba(31,45,61,.08),0 4px 16px rgba(31,45,61,.06);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{font-family:"Microsoft YaHei","PingFang SC","Source Han Sans SC",system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.55}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit}
+.wrap{max-width:1280px;margin:0 auto;padding:16px 20px 60px}
+
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:linear-gradient(120deg,#16365f 0%,#1b5fa8 60%,#2f7fd1 100%);color:#fff;border-radius:14px;padding:18px 22px;box-shadow:var(--shadow)}
+.topbar h1{font-size:20px;font-weight:700;letter-spacing:.5px}
+.topbar .sub{font-size:12.5px;opacity:.85;margin-top:3px}
+.topbar .actions{display:flex;gap:8px;flex-wrap:wrap}
+.btn{border:1px solid var(--line-strong);background:#fff;color:var(--ink);border-radius:8px;padding:7px 14px;font-size:13px;display:inline-flex;align-items:center;gap:6px;transition:all .15s;white-space:nowrap}
+.btn:hover{border-color:var(--primary);color:var(--primary)}
+.btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+.btn.primary:hover{background:var(--primary-2);color:#fff}
+.btn.ghost{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.35);color:#fff}
+.btn.ghost:hover{background:rgba(255,255,255,.22);border-color:rgba(255,255,255,.6);color:#fff}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.danger{background:var(--bad);border-color:var(--bad);color:#fff}
+.btn.danger:hover{background:#c94040}
+.btn.success{background:var(--good);border-color:var(--good);color:#fff}
+.btn.success:hover{background:#20965c}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:14px 0}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:12px 16px;box-shadow:var(--shadow)}
+.stat .num{font-size:22px;font-weight:700;color:var(--primary)}
+.stat .lab{font-size:12px;color:var(--ink-2);margin-top:2px}
+.stat.good .num{color:var(--good)}
+.stat.warn .num{color:var(--warn)}
+
+.rulebar{background:var(--primary-bg);border:1px solid #cfe0f3;color:#1c4c86;border-radius:var(--radius);padding:10px 16px;font-size:12.5px;margin:14px 0}
+.rulebar b{color:#16365f}
+.rulebar .warn{color:var(--warn);font-weight:600}
+
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 12px}
+.toolbar .right{margin-left:auto;display:flex;gap:8px}
+.searchbox{display:flex;align-items:center;background:#fff;border:1px solid var(--line-strong);border-radius:8px;padding:0 10px;height:34px;width:220px}
+.searchbox input{border:0;outline:0;flex:1;font-size:13px;background:transparent;color:var(--ink)}
+.searchbox svg{width:14px;height:14px;color:var(--ink-3);margin-right:6px}
+
+.tablecard{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+.tablewrap{overflow-x:auto}
+table.main{width:100%;border-collapse:collapse;min-width:1080px;table-layout:fixed}
+table.main th{background:#f6f8fb;color:var(--ink-2);font-weight:600;font-size:12px;padding:10px 8px;border-bottom:1px solid var(--line-strong);text-align:center;position:sticky;top:0;z-index:2}
+table.main td{padding:8px 8px;border-bottom:1px solid var(--line);text-align:center;font-size:13px;vertical-align:middle}
+table.main tr:last-child td{border-bottom:0}
+table.main tbody tr:hover{background:#f7fafd}
+.col-rank{width:60px}.col-xh{width:128px}.col-xm{width:96px}
+.col-mod{width:76px}.col-total{width:90px}.col-op{width:84px}
+.mod-score{font-weight:700}
+.mod-de .mod-score{color:var(--mod-de)}.mod-zhi .mod-score{color:var(--mod-zhi)}
+.mod-ti .mod-score{color:var(--mod-ti)}.mod-mei .mod-score{color:var(--mod-mei)}
+.mod-lao .mod-score{color:var(--mod-lao)}.mod-ko .mod-score{color:var(--mod-ko)}
+.td-total{font-size:15px;font-weight:800;color:var(--primary)}
+.td-kou{color:var(--bad);font-weight:600}
+.tag-edit{display:inline-flex;align-items:center;gap:4px;background:var(--primary-bg);color:var(--primary);border:1px solid #cfe0f3;border-radius:6px;padding:4px 10px;font-size:12px}
+.tag-edit:hover{background:#dbeaf8}
+.tag-del{border:0;background:transparent;color:var(--ink-3);font-size:12px;padding:4px 6px;border-radius:6px}
+.tag-del:hover{color:var(--bad);background:#fbeceb}
+.empty{padding:56px 20px;text-align:center;color:var(--ink-3)}
+.empty .big{font-size:16px;color:var(--ink-2);margin-bottom:6px}
+.empty .hint{font-size:13px}
+.chip{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;background:#eef2f7;color:var(--ink-2)}
+.chip.ko{background:#fbeceb;color:var(--bad)}
+.chip.has{background:var(--primary-bg);color:var(--primary)}
+.chip.pending{background:#fef3cd;color:#856404}
+.chip.approved{background:#d4edda;color:#155724}
+.chip.rejected{background:#f8d7da;color:#721c24}
+
+.overlay{position:fixed;inset:0;background:rgba(20,32,48,.45);display:none;align-items:flex-start;justify-content:center;z-index:100;padding:28px 16px;overflow-y:auto}
+.overlay.open{display:flex}
+.dialog{background:#fff;border-radius:14px;width:960px;max-width:100%;box-shadow:0 12px 48px rgba(20,32,48,.3);animation:pop .18s ease}
+@keyframes pop{from{transform:translateY(12px);opacity:0}to{transform:none;opacity:1}}
+.dialog.wide{width:1200px}
+.dialog.head{padding:16px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+.dialog.head h2{font-size:16px;flex:1}
+.dialog.head .xh{color:var(--ink-3);font-size:13px;font-weight:400}
+.dialog .body{padding:18px 22px;max-height:68vh;overflow-y:auto}
+.dialog .foot{padding:14px 22px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end;align-items:center}
+.icon-x{background:transparent;border:0;color:var(--ink-3);font-size:18px;line-height:1;padding:4px 8px;border-radius:6px}
+.icon-x:hover{background:#f0f2f5;color:var(--ink)}
+
+.modgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:12px}
+.modcard{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
+.modcard>.mc-head{padding:9px 14px;font-weight:700;font-size:13.5px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.mc-head .score{font-size:15px}
+.mc-body{padding:12px 14px;border-top:1px solid var(--line);display:grid;gap:9px}
+.frow{display:grid;grid-template-columns:96px 1fr;gap:8px;align-items:center}
+.frow .fl{font-size:12.5px;color:var(--ink-2);line-height:1.3}
+.frow input[type=number],.frow select{width:100%;border:1px solid var(--line-strong);border-radius:6px;padding:5px 8px;font-size:13px;background:#fff;color:var(--ink)}
+.frow input[type=number]:focus,.frow select:focus{outline:0;border-color:var(--primary);box-shadow:0 0 0 2px rgba(31,95,168,.12)}
+.frow .hint{grid-column:2;font-size:11px;color:var(--ink-3)}
+.hint{font-size:11px;color:var(--ink-3);line-height:1.4}
+.mod-de .mc-head{background:#eef5fc;color:var(--mod-de)}
+.mod-zhi .mc-head{background:#f1edfd;color:var(--mod-zhi)}
+.mod-ti .mc-head{background:#e8f7f4;color:var(--mod-ti)}
+.mod-mei .mc-head{background:#fcedf4;color:var(--mod-mei)}
+.mod-lao .mc-head{background:#faf3e3;color:var(--mod-lao)}
+.mod-ko .mc-head{background:#fdeeec;color:var(--mod-ko)}
+.score-preview{font-size:14px;font-weight:800}
+.mod-de .score-preview{color:var(--mod-de)}.mod-zhi .score-preview{color:var(--mod-zhi)}
+.mod-ti .score-preview{color:var(--mod-ti)}.mod-mei .score-preview{color:var(--mod-mei)}
+.mod-lao .score-preview{color:var(--mod-lao)}.mod-ko .score-preview{color:var(--mod-ko)}
+.totbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:#f7fafd;border:1px dashed var(--line-strong);border-radius:10px;padding:12px 16px;margin-bottom:12px}
+.totbar .formula{font-size:12.5px;color:var(--ink-2)}
+.totbar .result{font-size:18px;font-weight:800;color:var(--primary)}
+
+.tabbar{display:flex;gap:6px;border-bottom:1px solid var(--line);margin-bottom:14px}
+.tabbtn{border:0;background:transparent;padding:9px 16px;font-size:13.5px;color:var(--ink-2);border-bottom:2px solid transparent;cursor:pointer}
+.tabbtn.active{color:var(--primary);border-bottom-color:var(--primary);font-weight:600}
+
+.login-wrap{max-width:400px;margin:80px auto;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:28px 24px;box-shadow:var(--shadow)}
+.login-wrap h2{text-align:center;color:var(--primary);margin-bottom:18px}
+.login-wrap .frow{margin-bottom:14px}
+.login-wrap input{width:100%;border:1px solid var(--line-strong);border-radius:8px;padding:10px 12px;font-size:14px}
+.login-wrap input:focus{outline:0;border-color:var(--primary);box-shadow:0 0 0 3px rgba(31,95,168,.12)}
+
+.proof-item{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:12px}
+.proof-item:last-child{border-bottom:0}
+.proof-item .pf-key{color:var(--ink-2);min-width:100px}
+.proof-item .pf-name{flex:1;color:var(--primary)}
+.proof-item .pf-view{color:var(--primary);cursor:pointer;text-decoration:underline}
+
+.reject-input{width:100%;min-height:80px;border:1px solid var(--line-strong);border-radius:8px;padding:8px 10px;font-size:13px;resize:vertical;margin-top:8px}
+
+.app-row{display:grid;grid-template-columns:130px 80px 100px 80px 80px 80px 80px 80px 80px 100px;gap:4px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line);font-size:13px;cursor:pointer;transition:background .15s}
+.app-row:hover{background:#f7fafd}
+.app-row.pending-row{background:#fffbf0}
+.app-row .status-badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+.app-row .status-badge.pending{background:#fef3cd;color:#856404}
+.app-row .status-badge.approved{background:#d4edda;color:#155724}
+.app-row .status-badge.rejected{background:#f8d7da;color:#721c24}
+
+@media (max-width:720px){
+  .wrap{padding:10px 10px 40px}
+  .topbar{padding:14px 16px}
+  .topbar h1{font-size:17px}
+  .searchbox{width:100%}
+  .toolbar .right{margin-left:0;width:100%}
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .dialog .body{padding:14px}
+  .app-row{grid-template-columns:1fr 1fr;font-size:12px}
+}
+.toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(20px);background:#1f2d3d;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;opacity:0;pointer-events:none;transition:all .25s;z-index:200;max-width:86vw;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.err{background:var(--bad)}
+.toast.ok{background:var(--good)}
+.hidden{display:none!important}
+
+/* 班级管理 */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;margin-bottom:14px}
+.card h2{font-size:15px;color:var(--primary);margin-bottom:10px}
+.tblwrap{overflow-x:auto}
+table.grid{width:100%;border-collapse:collapse;font-size:13px}
+table.grid th{background:#f6f8fb;color:var(--ink-2);font-weight:600;font-size:12px;padding:9px 8px;border-bottom:1px solid var(--line-strong);text-align:left;white-space:nowrap}
+table.grid td{padding:8px;border-bottom:1px solid var(--line);vertical-align:middle}
+table.grid tbody tr:hover{background:#f7fafd}
+.imp-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.imp-lab{font-size:12.5px;color:var(--ink-2)}
+.imp-input{border:1px solid var(--line-strong);border-radius:8px;padding:6px 10px;font-size:13px;min-width:130px}
+.imp-input:focus{outline:0;border-color:var(--primary)}
+.imp-text{width:100%;min-height:120px;border:1px solid var(--line-strong);border-radius:8px;padding:10px;font-size:13px;line-height:1.7;resize:vertical}
+.imp-text:focus{outline:0;border-color:var(--primary)}
+.imp-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:10px}
+.imp-tip{font-size:12px;color:var(--ink-3)}
+.imp-result{margin-top:10px;background:#f7fafd;border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:12.5px;color:var(--ink-2)}
+</style>
+</head>
+<body>
+
+<div id="mainPage" class="wrap hidden">
+  <header class="topbar">
+    <div>
+      <h1>学生综合素质测评计算工具</h1>
+      <div class="sub">在线审核学生综测加分申请 · 德智体美劳五育加权 + 扣分项 · <span id="teacherName"></span></div>
+    </div>
+    <div class="actions">
+      <button class="btn ghost" id="btnLogout">退出登录</button>
+    </div>
+  </header>
+
+  <div class="rulebar">
+    <div>
+      计算口径：<b>综测总分 = 德×20% + 智×50% + 体×10% + 美×10% + 劳×10% + 扣分项</b>；各模块基础分为
+      <b>德 80 / 智(专业成绩) / 体 50+30 / 美 80 / 劳 80</b>，各模块奖励分均封顶 <b>20 分</b>；
+      <span class="warn">奖励分合计超过 20 时按 20 计，扣分项为负分。</span>
+    </div>
+  </div>
+
+  <div class="tabbar" id="mainTabs">
+    <button class="tabbtn active" data-tab="applications">申请审核</button>
+    <button class="tabbtn" data-tab="scores">学生总表</button>
+    <button class="tabbtn" data-tab="classes">班级管理</button>
+  </div>
+
+  <div id="tab-applications">
+    <div class="toolbar">
+      <select id="filterStatus" style="border:1px solid var(--line-strong);border-radius:8px;padding:6px 10px;font-size:13px">
+        <option value="">全部状态</option>
+        <option value="pending">待审核</option>
+        <option value="approved">已通过</option>
+        <option value="rejected">已驳回</option>
+      </select>
+      <select id="filterBj" style="border:1px solid var(--line-strong);border-radius:8px;padding:6px 10px;font-size:13px">
+        <option value="">全部班级</option>
+      </select>
+      <div class="searchbox">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input id="searchInput" placeholder="搜索学号 / 姓名…" autocomplete="off">
+      </div>
+      <div class="right">
+        <button class="btn" id="btnRefresh">刷新</button>
+      </div>
+    </div>
+
+    <div class="tablecard">
+      <div class="tablewrap">
+        <table class="main" style="min-width:auto">
+          <thead>
+            <tr>
+              <th>学号</th><th>姓名</th><th>班级</th><th>提交时间</th><th>状态</th>
+              <th>德育奖励</th><th>智育奖励</th><th>体育奖励</th><th>美育奖励</th><th>劳育奖励</th><th>扣分</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="appTbody"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="appEmpty">
+        <div class="big">暂无学生申请</div>
+        <div class="hint">学生提交申请后将在此显示</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-scores" class="hidden">
+    <div class="stats" id="stats">
+      <div class="stat"><div class="num" id="stCount">0</div><div class="lab">学生人数</div></div>
+      <div class="stat good"><div class="num" id="stAvg">–</div><div class="lab">平均综测分</div></div>
+      <div class="stat"><div class="num" id="stTop">–</div><div class="lab">最高综测分</div></div>
+    </div>
+    <div class="tablecard">
+      <div class="tablewrap">
+        <table class="main">
+          <colgroup>
+            <col class="col-rank"><col class="col-xh"><col class="col-xm">
+            <col class="col-mod"><col class="col-mod"><col class="col-mod"><col class="col-mod"><col class="col-mod"><col class="col-mod">
+            <col class="col-total"><col class="col-op">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>排名</th><th>学号</th><th>姓名</th>
+              <th>德<br>（20%）</th><th>智<br>（50%）</th><th>体<br>（10%）</th><th>美<br>（10%）</th><th>劳<br>（10%）</th><th>扣分</th>
+              <th>综测分数</th><th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="scoreTbody"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="scoreEmpty">
+        <div class="big">暂无学生数据</div>
+        <div class="hint">审核通过学生申请后，分数将自动计入</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-classes" class="hidden">
+    <div class="card">
+      <h2>导入学生（按教师号归属班级）</h2>
+      <div class="imp-row">
+        <span class="imp-lab">教师号</span>
+        <input id="impTeacher" class="imp-input" placeholder="如 T001">
+        <span class="imp-lab">导入班级</span>
+        <input id="impClass" class="imp-input" placeholder="如 护理2301">
+        <span class="imp-lab">专业</span>
+        <input id="impMajor" class="imp-input" placeholder="如 护理">
+      </div>
+      <textarea id="impText" class="imp-text" placeholder="每行一条：学号,姓名[,专业]&#10;2023010109,赵一&#10;2023010110,钱二"></textarea>
+      <div class="imp-foot">
+        <span class="imp-tip">默认密码 123456；已存在的学号会自动跳过。仅能导入到本人教师号下的班级。</span>
+        <button class="btn primary" id="btnImport">开始导入</button>
+      </div>
+      <div class="imp-result hidden" id="impResult"></div>
+    </div>
+
+    <div class="card">
+      <h2>我的班级</h2>
+      <div class="tblwrap"><table class="grid" id="classTable"></table></div>
+    </div>
+
+    <div class="card">
+      <h2>考勤登记</h2>
+      <div class="imp-row">
+        <span class="imp-lab">日期</span>
+        <input type="date" id="attDate" class="imp-input">
+        <span class="imp-lab">班级</span>
+        <select id="attClass" class="imp-input"></select>
+        <button class="btn" id="btnLoadAtt">载入名单</button>
+        <button class="btn primary" id="btnSaveAtt">保存考勤</button>
+      </div>
+      <div class="imp-tip" style="margin-bottom:8px">勾选请假 / 迟到 / 缺勤后保存，未勾选默认记为「出勤」。</div>
+      <div class="tblwrap"><table class="grid" id="attTable"></table></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="reviewOverlay">
+  <div class="dialog wide">
+    <div class="head">
+      <h2>申请详情 <span class="xh" id="rvStudentInfo"></span></h2>
+      <button class="icon-x" id="reviewClose" aria-label="关闭">×</button>
+    </div>
+    <div class="body" id="reviewBody"></div>
+    <div class="foot" id="reviewFoot"></div>
+  </div>
+</div>
+
+<div class="overlay" id="editOverlay">
+  <div class="dialog wide">
+    <div class="head">
+      <h2>编辑加分明细 <span class="xh" id="edStudentInfo"></span></h2>
+      <button class="icon-x" id="editClose" aria-label="close">×</button>
+    </div>
+    <div class="body">
+      <div class="totbar">
+        <div class="formula">综测 = 德×20% + 智×50% + 体×10% + 美×10% + 劳×10% + 扣分</div>
+        <div class="result">综测总分：<span id="edTotal">0.00</span> 分</div>
+      </div>
+      <div class="modgrid" id="modGrid"></div>
+    </div>
+    <div class="foot">
+      <button class="btn" id="editCancel">取消</button>
+      <button class="btn primary" id="editSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script>
+const API = window.API_BASE || '';
+let TOKEN = '';
+let USER = null;
+let studentsData = [];
+let editId = null;
+
+const OPTS = {
+  sixiang: [{v:0,t:'无'},{v:1,t:'入党积极分子 +1'},{v:2,t:'中共预备党员 +2'},{v:3,t:'中共党员 +3'}],
+  biaozhang: [{v:0,t:'无'},{v:5,t:'校级表彰 +5'},{v:6,t:'市级表彰 +6'},{v:8,t:'省级表彰 +8'},{v:10,t:'国家级表彰 +10'}],
+  ganbu: [{v:8,t:'校级学生组织主席团/团委副书记 +8'},{v:6,t:'校级学生组织部门正副职 +6'},{v:3,t:'校级学生组织部门干事 +3'},{v:6,t:'院级学生组织主席团/团总支副书记 +6'},{v:4,t:'院级学生组织部门正副职 +4'},{v:3,t:'班级班干部 +3'},{v:2,t:'寝室长/信息员 +2'}],
+  rongyu: [{v:10,t:'国家部委级荣誉 +10'},{v:6,t:'省级荣誉 +6'},{v:4,t:'市级荣誉 +4'},{v:2,t:'校级荣誉 +2'},{v:10,t:'征兵入伍/三支一扶/西部计划 +10'}],
+  jingsai: [{v:0,t:'无'},{v:20,t:'Ⅰ类 特等奖 +20'},{v:18,t:'Ⅰ类 一等奖 +18'},{v:16,t:'Ⅰ类 二等奖 +16'},{v:14,t:'Ⅰ类 三等奖 +14'},{v:18,t:'Ⅱ类 特等奖 +18'},{v:15,t:'Ⅱ类 一等奖 +15'},{v:12,t:'Ⅱ类 二等奖 +12'},{v:10,t:'Ⅱ类 三等奖 +10'},{v:15,t:'Ⅲ类 特等奖 +15'},{v:12,t:'Ⅲ类 一等奖 +12'},{v:10,t:'Ⅲ类 二等奖 +10'},{v:8,t:'Ⅲ类 三等奖 +8'},{v:12,t:'Ⅳ类 特等奖 +12'},{v:10,t:'Ⅳ类 一等奖 +10'},{v:8,t:'Ⅳ类 二等奖 +8'},{v:6,t:'Ⅳ类 三等奖 +6'},{v:5,t:'校赛 特等奖 +5'},{v:3,t:'校赛 一等奖 +3'},{v:2,t:'校赛 二等奖 +2'},{v:1,t:'校赛 三等奖 +1'}],
+  jineng: [{v:4,t:'大学英语四级 +4'},{v:8,t:'大学英语六级 +8'},{v:3,t:'计算机二级 +3'},{v:5,t:'计算机三级 +5'},{v:3,t:'普通话二甲 +3'},{v:5,t:'普通话一乙 +5'},{v:8,t:'普通话一甲 +8'},{v:3,t:'职业技能初级 +3'},{v:5,t:'职业技能中级 +5'},{v:8,t:'职业技能高级 +8'}],
+  chuangye: [{v:0,t:'无'},{v:10,t:'自主创业（完成登记并实际运作）+10'}],
+  tiyuChengji: [{v:50,t:'体育课及格 +50'},{v:0,t:'无体育课/未及格 +0'}],
+  tice: [{v:30,t:'体测合格 +30'},{v:30,t:'退役士兵免测 +30'},{v:20,t:'病/伤/残免测 +20'},{v:0,t:'未参加体测 +0'}],
+  tiyuJiangli: [{v:0,t:'无'},{v:2,t:'校级奖项 +2'},{v:4,t:'市级奖项 +4'},{v:6,t:'省级奖项 +6'},{v:10,t:'国家级奖项 +10'}],
+  meiyuJiangli: [{v:0,t:'无'},{v:20,t:'Ⅰ类 特等奖 +20'},{v:18,t:'Ⅰ类 一等奖 +18'},{v:16,t:'Ⅰ类 二等奖 +16'},{v:14,t:'Ⅰ类 三等奖 +14'},{v:18,t:'Ⅱ类 特等奖 +18'},{v:15,t:'Ⅱ类 一等奖 +15'},{v:12,t:'Ⅱ类 二等奖 +12'},{v:10,t:'Ⅱ类 三等奖 +10'},{v:15,t:'Ⅲ类 特等奖 +15'},{v:12,t:'Ⅲ类 一等奖 +12'},{v:10,t:'Ⅲ类 二等奖 +10'},{v:8,t:'Ⅲ类 三等奖 +8'},{v:12,t:'Ⅳ类 特等奖 +12'},{v:10,t:'Ⅳ类 一等奖 +10'},{v:8,t:'Ⅳ类 二等奖 +8'},{v:6,t:'Ⅳ类 三等奖 +6'},{v:5,t:'校赛 特等奖 +5'},{v:3,t:'校赛 一等奖 +3'},{v:2,t:'校赛 二等奖 +2'},{v:1,t:'校赛 三等奖 +1'}],
+  shehui: [{v:0,t:'无'},{v:10,t:'国家级表彰 +10'},{v:8,t:'省级表彰 +8'},{v:6,t:'市级表彰 +6'},{v:4,t:'校级表彰 +4'},{v:5,t:'国家级先进集体成员 +5'},{v:4,t:'省级先进集体成员 +4'},{v:3,t:'市级先进集体成员 +3'},{v:2,t:'校级先进集体成员 +2'},{v:2,t:'完成社会实践并提交报告 +2'}],
+  chufen: [{v:0,t:'无'},{v:30,t:'公安查处/违法违纪等 -30'},{v:20,t:'留校察看 -20'},{v:15,t:'记过 -15'},{v:10,t:'严重警告 -10'},{v:7,t:'警告 -7'},{v:5,t:'全校通报批评 -5'},{v:2,t:'学院通报批评 -2'}]
+};
+const CAP = 20;
+const PROOF_LABEL = {
+  'd-sixiang':'思想进步','d-biaozhang':'见义勇为等表彰','d-ganbu':'团学干部任职','d-rongyu':'荣誉表彰',
+  'z-jingsai':'学科技能竞赛','z-jineng':'职业技能证书','z-chuangye':'创新创业',
+  't-jiangli':'体育获奖','m-jiangli':'文艺竞赛/演出',
+  'l-zhiyuan':'志愿服务','l-xianxue':'无偿献血','l-shehui':'社会实践/表彰','k-chufen':'违纪处分'
+};
+
+function sum(vals){return vals.reduce((a,b)=>a+(Number(b)||0),0);}
+function cap(v){return Math.min(Math.max(v||0,0),CAP);}
+function calcDeyu(s){const d=s.deyu;let jl=(Number(d.sixiang)||0)+(Number(d.biaozhang)||0)+Math.min(sum(d.ganbu),10)+Math.min(sum(d.rongyu),10)+(Number(d.custom)||0);jl=cap(jl);return Math.min(80+jl,100);}
+function calcZhiyu(s){const z=s.zhiyu;let jl=(Number(z.jingsai)||0)+Math.min(sum(z.jineng),20)+(Number(z.chuangye)||0)+(Number(z.custom)||0);jl=cap(jl);return Math.min((Number(z.zhuanye)||0)+jl,100);}
+function calcTiyu(s){const t=s.tiyu;let jl=(Number(t.jiangli)||0)+(Number(t.custom)||0);jl=cap(jl);return Math.min((Number(t.chengji)||0)+(Number(t.tice)||0)+jl,100);}
+function calcMeiyu(s){const m=s.meiyu;let jl=(Number(m.jiangli)||0)+(Number(m.custom)||0);jl=cap(jl);return Math.min(80+jl,100);}
+function calcLaoyu(s){const l=s.laoyu;const zhiyuan=Math.min(Number(l.zhiyuanCishu)||0,10);const xianxue=(Number(l.xianxue)||0)*5;let jl=zhiyuan+xianxue+(Number(l.qinshi)||0)+(Number(l.shehui)||0)+(Number(l.custom)||0);jl=cap(jl);return Math.min(80+jl,100);}
+function calcKoufen(s){const k=s.koufen;return -((Number(k.chufen)||0)+(Number(k.richang)||0));}
+function calcZongce(s){const de=calcDeyu(s),zhi=calcZhiyu(s),ti=calcTiyu(s),mei=calcMeiyu(s),lao=calcLaoyu(s);return de*0.20+zhi*0.50+ti*0.10+mei*0.10+lao*0.10+calcKoufen(s);}
+function esc(x){return String(x||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+let toastTimer=null;
+function toast(msg,type){const t=document.getElementById('toast');t.textContent=msg;t.className='toast show'+(type?' '+type:'');clearTimeout(toastTimer);toastTimer=setTimeout(()=>{t.className='toast';},2800);}
+
+async function apiGet(url){
+  const resp=await fetch(API+url,{headers:{'Authorization':'Bearer '+TOKEN}});
+  return resp.json();
+}
+async function apiPost(url,body){
+  const resp=await fetch(API+url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},body:JSON.stringify(body)});
+  return resp.json();
+}
+async function apiPut(url,body){
+  const resp=await fetch(API+url,{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},body:JSON.stringify(body)});
+  return resp.json();
+}
+
+function enterMain(){
+  document.getElementById('mainPage').classList.remove('hidden');
+  document.getElementById('teacherName').textContent=USER.name;
+  document.getElementById('impTeacher').value=USER.account;
+  document.getElementById('attDate').value=new Date().toISOString().slice(0,10);
+  loadApplications();
+  loadStudents();
+}
+
+function doLogout(){
+  ZCAuth.clearSession();
+  ZCAuth.goLogin();
+}
+
+async function loadApplications(){
+  const status=document.getElementById('filterStatus').value;
+  const bj=document.getElementById('filterBj').value;
+  const keyword=document.getElementById('searchInput').value.trim();
+  let url='/api/teacher/applications?';
+  if(status)url+='status='+status+'&';
+  if(bj)url+='bj='+encodeURIComponent(bj)+'&';
+  if(keyword)url+='keyword='+encodeURIComponent(keyword)+'&';
+  try{
+    const result=await apiGet(url);
+    if(result.code!==0){toast(result.msg,'err');return;}
+    renderApplications(result.data);
+  }catch(e){toast('加载申请列表失败','err');}
+}
+
+function renderApplications(apps){
+  const tbody=document.getElementById('appTbody');
+  const empty=document.getElementById('appEmpty');
+  if(!apps||!apps.length){tbody.innerHTML='';empty.style.display='block';return;}
+  empty.style.display='none';
+  const bjSet=new Set();
+  tbody.innerHTML=apps.map(a=>{
+    if(a.bj)bjSet.add(a.bj);
+    const statusText=a.status==='pending'?'待审核':(a.status==='approved'?'已通过':'已驳回');
+    const rowClass=a.status==='pending'?'pending-row':'';
+    const time=a.created_at?new Date(a.created_at).toLocaleString('zh-CN'):'';
+    return `<tr class="${rowClass}" data-id="${a.id}" style="cursor:pointer">
+      <td>${esc(a.xh)}</td><td>${esc(a.xm)}</td><td>${esc(a.bj)}</td><td style="font-size:11px">${time}</td>
+      <td><span class="status-badge ${a.status}">${statusText}</span></td>
+      <td>${a.deyu_score?a.deyu_score.toFixed(1):'–'}</td>
+      <td>${a.zhiyu_reward?a.zhiyu_reward.toFixed(1):'–'}</td>
+      <td>${a.tiyu_reward?a.tiyu_reward.toFixed(1):'–'}</td>
+      <td>${a.meiyu_reward?a.meiyu_reward.toFixed(1):'–'}</td>
+      <td>${a.laoyu_reward?a.laoyu_reward.toFixed(1):'–'}</td>
+      <td>${a.koufen?a.koufen.toFixed(0):'0'}</td>
+      <td><button class="tag-edit" onclick="openReview(${a.id})">查看</button></td>
+    </tr>`;
+  }).join('');
+  const bjSel=document.getElementById('filterBj');
+  const curBj=bjSel.value;
+  bjSel.innerHTML='<option value="">全部班级</option>'+Array.from(bjSet).map(b=>`<option value="${esc(b)}"${b===curBj?' selected':''}>${esc(b)}</option>`).join('');
+}
+
+document.getElementById('appTbody').addEventListener('click',e=>{
+  const tr=e.target.closest('tr[data-id]');
+  if(tr&&!e.target.closest('button'))openReview(Number(tr.dataset.id));
+});
+
+async function openReview(id){
+  try{
+    const result=await apiGet('/api/teacher/applications/'+id);
+    if(result.code!==0){toast(result.msg,'err');return;}
+    renderReview(result.data);
+  }catch(e){toast('加载申请详情失败','err');}
+}
+
+function renderReview(data){
+  const info=document.getElementById('rvStudentInfo');
+  info.textContent=data.xh+' · '+data.xm+' · '+(data.bj||'');
+  const body=document.getElementById('reviewBody');
+  const foot=document.getElementById('reviewFoot');
+  const d=data.detail||{};
+  const deyu=d.deyu||{};
+  const zhiyu=d.zhiyu||{};
+  const tiyu=d.tiyu||{};
+  const meiyu=d.meiyu||{};
+  const laoyu=d.laoyu||{};
+  const koufen=d.koufen||{};
+
+  let html='<div class="totbar"><div class="formula">学生填报明细（提交时间：'+(data.created_at?new Date(data.created_at).toLocaleString('zh-CN'):'')+'）</div></div>';
+  html+='<div class="modgrid">';
+
+  html+=`<div class="modcard mod-de"><div class="mc-head"><span>德育（基础 80 + 奖励）</span></div><div class="mc-body">
+    <div class="frow"><div class="fl">思想进步</div><div>${deyu.sixiang||0}</div></div>
+    <div class="frow"><div class="fl">见义勇为等表彰</div><div>${deyu.biaozhang||0}</div></div>
+    <div class="frow"><div class="fl">团学干部任职</div><div>${(deyu.ganbu||[]).join('、')||'无'}</div></div>
+    <div class="frow"><div class="fl">荣誉表彰</div><div>${(deyu.rongyu||[]).join('、')||'无'}</div></div>
+  </div></div>`;
+
+  html+=`<div class="modcard mod-zhi"><div class="mc-head"><span>智育（专业成绩 + 奖励）</span></div><div class="mc-body">
+    <div class="frow"><div class="fl">学科技能竞赛</div><div>${zhiyu.jingsai||0}</div></div>
+    <div class="frow"><div class="fl">职业技能证书</div><div>${(zhiyu.jineng||[]).join('、')||'无'}</div></div>
+    <div class="frow"><div class="fl">创新创业</div><div>${zhiyu.chuangye||0}</div></div>
+  </div></div>`;
+
+  html+=`<div class="modcard mod-ti"><div class="mc-head"><span>体育（成绩 50 + 体测 30 + 奖励）</span></div><div class="mc-body">
+    <div class="frow"><div class="fl">体育获奖</div><div>${tiyu.jiangli||0}</div></div>
+  </div></div>`;
+
+  html+=`<div class="modcard mod-mei"><div class="mc-head"><span>美育（基础 80 + 奖励）</span></div><div class="mc-body">
+    <div class="frow"><div class="fl">文艺竞赛/演出</div><div>${meiyu.jiangli||0}</div></div>
+  </div></div>`;
+
+  html+=`<div class="modcard mod-lao"><div class="mc-head"><span>劳育（基础 80 + 奖励）</span></div><div class="mc-body">
+    <div class="frow"><div class="fl">志愿服务次数</div><div>${laoyu.zhiyuanCishu||0}</div></div>
+    <div class="frow"><div class="fl">无偿献血次数</div><div>${laoyu.xianxue||0}</div></div>
+    <div class="frow"><div class="fl">社会实践/表彰</div><div>${laoyu.shehui||0}</div></div>
+  </div></div>`;
+
+  html+=`<div class="modcard mod-ko"><div class="mc-head"><span>扣分项</span></div><div class="mc-body">
+    <div class="frow"><div class="fl">违纪处分</div><div>${koufen.chufen||0}</div></div>
+  </div></div>`;
+
+  html+='</div>';
+
+  const proofs=data.proofs||[];
+  if(proofs.length){
+    html+='<div style="margin-top:12px;padding:10px 14px;background:#f8fafc;border:1px dashed var(--line-strong);border-radius:10px">';
+    html+='<b style="font-size:13px">证明材料（'+proofs.length+' 份）</b>';
+    proofs.forEach(p=>{
+      html+=`<div class="proof-item"><span class="pf-key">${esc(PROOF_LABEL[p.item_key]||p.item_key)}</span><span class="pf-name">${esc(p.file_name)}</span><a class="pf-view" href="${API}/api/files/${encodeURIComponent(p.file_path)}" target="_blank">查看</a></div>`;
+    });
+    html+='</div>';
+  }
+
+  if(data.status==='rejected'&&data.reject_reason){
+    html+='<div style="margin-top:12px;padding:10px 14px;background:#fdf3f5;border:1px solid #f5c6cb;border-radius:10px;font-size:13px;color:var(--bad)"><b>驳回理由：</b>'+esc(data.reject_reason)+'</div>';
+  }
+
+  body.innerHTML=html;
+
+  if(data.status==='pending'){
+    foot.innerHTML=`
+      <button class="btn success" id="btnApprove">通过</button>
+      <button class="btn danger" id="btnReject">驳回</button>
+      <button class="btn" id="reviewCloseBtn">关闭</button>
+    `;
+    foot.querySelector('#btnApprove').addEventListener('click',async()=>{
+      if(!confirm('确认通过该申请？奖励分将写入学生成绩。'))return;
+      const r=await apiPut('/api/teacher/applications/'+data.id+'/review',{action:'approve'});
+      if(r.code===0){toast('已通过，奖励分已写入','ok');document.getElementById('reviewOverlay').classList.remove('open');loadApplications();loadStudents();}
+      else toast(r.msg,'err');
+    });
+    foot.querySelector('#btnReject').addEventListener('click',()=>{
+      const reason=prompt('请输入驳回理由（必填）：');
+      if(!reason||!reason.trim()){toast('驳回理由必填','err');return;}
+      apiPut('/api/teacher/applications/'+data.id+'/review',{action:'reject',reject_reason:reason.trim()}).then(r=>{
+        if(r.code===0){toast('已驳回','ok');document.getElementById('reviewOverlay').classList.remove('open');loadApplications();loadStudents();}
+        else toast(r.msg,'err');
+      });
+    });
+    foot.querySelector('#reviewCloseBtn').addEventListener('click',()=>{document.getElementById('reviewOverlay').classList.remove('open');});
+  }else{
+    foot.innerHTML='<button class="btn" id="reviewCloseBtn">关闭</button>';
+    foot.querySelector('#reviewCloseBtn').addEventListener('click',()=>{document.getElementById('reviewOverlay').classList.remove('open');});
+  }
+
+  document.getElementById('reviewOverlay').classList.add('open');
+}
+
+async function loadStudents(){
+  try{
+    const result=await apiGet('/api/teacher/students');
+    if(result.code!==0)return;
+    studentsData=result.data.map(s=>{
+      const de=calcDeyu(s),zhi=calcZhiyu(s),ti=calcTiyu(s),mei=calcMeiyu(s),lao=calcLaoyu(s),ko=calcKoufen(s);
+      return {...s, id:s.id||s.xh, deyuScore:de, zhiyuScore:zhi, tiyuScore:ti, meiyuScore:mei, laoyuScore:lao, koufenScore:ko, zongceScore:de*0.20+zhi*0.50+ti*0.10+mei*0.10+lao*0.10+ko};
+    }).sort((a,b)=>b.zongceScore-a.zongceScore);
+    studentsData.forEach((s,i)=>s.rank=i+1);
+    renderScoreTable();
+  }catch(e){}
+}
+
+function renderScoreTable(){
+  const tbody=document.getElementById('scoreTbody');
+  const empty=document.getElementById('scoreEmpty');
+  const n=studentsData.length;
+  document.getElementById('stCount').textContent=n;
+  if(!n){tbody.innerHTML='';empty.style.display='block';document.getElementById('stAvg').textContent='–';document.getElementById('stTop').textContent='–';return;}
+  empty.style.display='none';
+  const total=studentsData.reduce((a,s)=>a+s.zongceScore,0);
+  const tops=studentsData.map(s=>s.zongceScore).sort((a,b)=>b-a);
+  document.getElementById('stAvg').textContent=(total/n).toFixed(2);
+  document.getElementById('stTop').textContent=tops[0].toFixed(2);
+
+  tbody.innerHTML=studentsData.map(s=>{
+    const ko=s.koufenScore;
+    return `<tr>
+      <td>${s.rank}</td><td>${esc(s.xh)}</td><td>${esc(s.xm)}</td>
+      <td class="mod-de"><span class="mod-score">${s.deyuScore.toFixed(1)}</span></td>
+      <td class="mod-zhi"><span class="mod-score">${s.zhiyuScore.toFixed(1)}</span></td>
+      <td class="mod-ti"><span class="mod-score">${s.tiyuScore.toFixed(1)}</span></td>
+      <td class="mod-mei"><span class="mod-score">${s.meiyuScore.toFixed(1)}</span></td>
+      <td class="mod-lao"><span class="mod-score">${s.laoyuScore.toFixed(1)}</span></td>
+      <td class="mod-ko"><span class="td-kou">${ko<0?ko.toFixed(0):'0'}</span></td>
+      <td><span class="td-total">${s.zongceScore.toFixed(2)}</span></td>
+      <td><button class="tag-edit" data-sid="${s.id}">编辑</button></td>
+    </tr>`;
+  }).join('');
+}
+
+document.getElementById('scoreTbody').addEventListener('click',e=>{
+  const btn=e.target.closest('[data-sid]');
+  if(btn)openEdit(Number(btn.dataset.sid));
+});
+
+function buildSelect(opts,val,multi){
+  if(multi){const sel=document.createElement('select');sel.multiple=true;sel.size=Math.min(opts.length,6);sel.style.minHeight='96px';opts.forEach(o=>{const op=document.createElement('option');op.value=o.v;op.textContent=o.t;if((val||[]).includes(o.v))op.selected=true;sel.appendChild(op);});return sel;}
+  const sel=document.createElement('select');opts.forEach(o=>{const op=document.createElement('option');op.value=o.v;op.textContent=o.t;if(Number(val)===o.v)op.selected=true;sel.appendChild(op);});return sel;
+}
+function numInput(val,min,max,step){const i=document.createElement('input');i.type='number';i.value=(val===undefined||val===null)?'':val;if(min!==undefined)i.min=min;if(max!==undefined)i.max=max;i.step=step!==undefined?step:1;return i;}
+function fieldRow(label,control,hint){const row=document.createElement('div');row.className='frow';const l=document.createElement('div');l.className='fl';l.textContent=label;row.appendChild(l);row.appendChild(control);if(hint){const h=document.createElement('div');h.className='hint';h.textContent=hint;row.appendChild(h);}return row;}
+function modCard(cls,title,body){const card=document.createElement('div');card.className='modcard '+cls;const head=document.createElement('div');head.className='mc-head';head.innerHTML='<span>'+title+'</span><span class="score-preview" id="pv-'+cls+'"></span>';const bd=document.createElement('div');bd.className='mc-body';bd.appendChild(body);card.appendChild(head);card.appendChild(bd);return card;}
+
+function openEdit(sid){
+  const s=studentsData.find(x=>x.id===sid);
+  if(!s)return;
+  editId=sid;
+  document.getElementById('edStudentInfo').textContent=s.xh+' · '+s.xm;
+  const grid=document.getElementById('modGrid');
+  grid.innerHTML='';
+
+  const wrap1=document.createElement('div');
+  const si=buildSelect(OPTS.sixiang,s.deyu.sixiang);si.dataset.k='deyu.sixiang';wrap1.appendChild(fieldRow('思想进步',si));
+  const bz=buildSelect(OPTS.biaozhang,s.deyu.biaozhang);bz.dataset.k='deyu.biaozhang';wrap1.appendChild(fieldRow('见义勇为等表彰',bz));
+  const gb=buildSelect(OPTS.ganbu,s.deyu.ganbu,true);gb.dataset.k='deyu.ganbu';wrap1.appendChild(fieldRow('团学干部任职',gb,'干部类封顶10'));
+  const ry=buildSelect(OPTS.rongyu,s.deyu.rongyu,true);ry.dataset.k='deyu.rongyu';wrap1.appendChild(fieldRow('荣誉加分',ry,'荣誉类封顶10'));
+  const cu1=numInput(s.deyu.custom);cu1.dataset.k='deyu.custom';wrap1.appendChild(fieldRow('其他德育加分',cu1));
+  bindEditChange(wrap1);
+  grid.appendChild(modCard('mod-de','德育（基础 80 + 奖励）',wrap1));
+
+  const wrap2=document.createElement('div');
+  const zy=numInput(s.zhiyu.zhuanye,0,80,0.1);zy.dataset.k='zhiyu.zhuanye';wrap2.appendChild(fieldRow('专业成绩（80分制）',zy));
+  const js=buildSelect(OPTS.jingsai,s.zhiyu.jingsai);js.dataset.k='zhiyu.jingsai';wrap2.appendChild(fieldRow('学科技能竞赛',js));
+  const jn=buildSelect(OPTS.jineng,s.zhiyu.jineng,true);jn.dataset.k='zhiyu.jineng';wrap2.appendChild(fieldRow('职业技能证书',jn,'证书类封顶20'));
+  const cy=buildSelect(OPTS.chuangye,s.zhiyu.chuangye);cy.dataset.k='zhiyu.chuangye';wrap2.appendChild(fieldRow('创新创业',cy));
+  const cu2=numInput(s.zhiyu.custom);cu2.dataset.k='zhiyu.custom';wrap2.appendChild(fieldRow('其他智育加分',cu2));
+  bindEditChange(wrap2);
+  grid.appendChild(modCard('mod-zhi','智育（专业成绩 + 奖励）',wrap2));
+
+  const wrap3=document.createElement('div');
+  const cj=buildSelect(OPTS.tiyuChengji,s.tiyu.chengji);cj.dataset.k='tiyu.chengji';wrap3.appendChild(fieldRow('期末体育成绩（50分）',cj));
+  const tc=buildSelect(OPTS.tice,s.tiyu.tice);tc.dataset.k='tiyu.tice';wrap3.appendChild(fieldRow('体质测试（30分）',tc));
+  const jl=buildSelect(OPTS.tiyuJiangli,s.tiyu.jiangli);jl.dataset.k='tiyu.jiangli';wrap3.appendChild(fieldRow('体育奖励',jl));
+  const cu3=numInput(s.tiyu.custom);cu3.dataset.k='tiyu.custom';wrap3.appendChild(fieldRow('其他体育加分',cu3));
+  bindEditChange(wrap3);
+  grid.appendChild(modCard('mod-ti','体育（成绩 50 + 体测 30 + 奖励）',wrap3));
+
+  const wrap4=document.createElement('div');
+  const mj=buildSelect(OPTS.meiyuJiangli,s.meiyu.jiangli);mj.dataset.k='meiyu.jiangli';wrap4.appendChild(fieldRow('文艺竞赛/演出获奖',mj));
+  const cu4=numInput(s.meiyu.custom);cu4.dataset.k='meiyu.custom';wrap4.appendChild(fieldRow('其他美育加分',cu4));
+  bindEditChange(wrap4);
+  grid.appendChild(modCard('mod-mei','美育（基础 80 + 奖励）',wrap4));
+
+  const wrap5=document.createElement('div');
+  const zy2=numInput(s.laoyu.zhiyuanCishu,0,99,1);zy2.dataset.k='laoyu.zhiyuanCishu';wrap5.appendChild(fieldRow('志愿公益次数',zy2,'1次=1分，封顶10'));
+  const xx=numInput(s.laoyu.xianxue,0,99,1);xx.dataset.k='laoyu.xianxue';wrap5.appendChild(fieldRow('义务献血次数',xx,'每次+5分'));
+  const qs=numInput(s.laoyu.qinshi,0,20,1);qs.dataset.k='laoyu.qinshi';wrap5.appendChild(fieldRow('最美寝室加分',qs));
+  const sh=buildSelect(OPTS.shehui,s.laoyu.shehui);sh.dataset.k='laoyu.shehui';wrap5.appendChild(fieldRow('社会实践',sh));
+  const cu5=numInput(s.laoyu.custom);cu5.dataset.k='laoyu.custom';wrap5.appendChild(fieldRow('其他劳育加分',cu5));
+  bindEditChange(wrap5);
+  grid.appendChild(modCard('mod-lao','劳育（基础 80 + 奖励）',wrap5));
+
+  const wrap6=document.createElement('div');
+  const cf=buildSelect(OPTS.chufen,s.koufen.chufen);cf.dataset.k='koufen.chufen';wrap6.appendChild(fieldRow('纪律处分',cf));
+  const rc=numInput(s.koufen.richang,0,999,1);rc.dataset.k='koufen.richang';wrap6.appendChild(fieldRow('日常扣分合计',rc));
+  bindEditChange(wrap6);
+  grid.appendChild(modCard('mod-ko','扣分项',wrap6));
+
+  updateEditTotbar(s);
+  document.getElementById('editOverlay').classList.add('open');
+}
+
+function bindEditChange(wrap){
+  wrap.addEventListener('change',e=>{const t=e.target;if(!t.dataset.k)return;setEditField(t.dataset.k,t);});
+  wrap.addEventListener('input',e=>{const t=e.target;if(!t.dataset.k)return;setEditField(t.dataset.k,t);});
+}
+function setEditField(path,el){
+  const s=studentsData.find(x=>x.id===editId);if(!s)return;
+  const parts=path.split('.');const obj=s[parts[0]];const key=parts[1];
+  if(el.multiple){obj[key]=Array.from(el.selectedOptions).map(o=>Number(o.value));}
+  else if(el.type==='number'){obj[key]=el.value===''?0:Number(el.value);}
+  else{obj[key]=Number(el.value)||0;}
+  updateEditTotbar(s);
+}
+function updateEditTotbar(s){
+  document.getElementById('pv-mod-de').textContent='德育 '+calcDeyu(s).toFixed(1);
+  document.getElementById('pv-mod-zhi').textContent='智育 '+calcZhiyu(s).toFixed(1);
+  document.getElementById('pv-mod-ti').textContent='体育 '+calcTiyu(s).toFixed(1);
+  document.getElementById('pv-mod-mei').textContent='美育 '+calcMeiyu(s).toFixed(1);
+  document.getElementById('pv-mod-lao').textContent='劳育 '+calcLaoyu(s).toFixed(1);
+  document.getElementById('pv-mod-ko').textContent='扣分 '+calcKoufen(s).toFixed(0);
+  document.getElementById('edTotal').textContent=calcZongce(s).toFixed(2);
+}
+
+document.getElementById('editSave').addEventListener('click',()=>{
+  const s=studentsData.find(x=>x.id===editId);if(!s)return;
+  apiPut('/api/teacher/students/'+s.xh,s).then(r=>{
+    if(r.code===0){toast('已保存','ok');document.getElementById('editOverlay').classList.remove('open');loadStudents();}
+    else{toast(r.msg,'err');}
+  }).catch(()=>{toast('保存失败','err');document.getElementById('editOverlay').classList.remove('open');});
+});
+document.getElementById('editCancel').addEventListener('click',()=>{document.getElementById('editOverlay').classList.remove('open');});
+document.getElementById('editClose').addEventListener('click',()=>{document.getElementById('editOverlay').classList.remove('open');});
+
+document.getElementById('reviewClose').addEventListener('click',()=>{document.getElementById('reviewOverlay').classList.remove('open');});
+document.getElementById('reviewOverlay').addEventListener('click',e=>{if(e.target===document.getElementById('reviewOverlay'))document.getElementById('reviewOverlay').classList.remove('open');});
+document.getElementById('editOverlay').addEventListener('click',e=>{if(e.target===document.getElementById('editOverlay'))document.getElementById('editOverlay').classList.remove('open');});
+
+document.getElementById('btnLogout').addEventListener('click',doLogout);
+
+document.getElementById('filterStatus').addEventListener('change',loadApplications);
+document.getElementById('filterBj').addEventListener('change',loadApplications);
+document.getElementById('searchInput').addEventListener('input',loadApplications);
+document.getElementById('btnRefresh').addEventListener('click',()=>{loadApplications();loadStudents();});
+
+/* ================= 班级管理 ================= */
+let myClasses=[];
+let attRoster=[];
+const ATT_LABEL={present:'出勤',late:'迟到',absent:'缺勤',leave:'请假'};
+
+async function loadMyClasses(){
+  const r=await apiGet('/api/teacher/classes');
+  if(r.code!==0){toast(r.msg,'err');return;}
+  myClasses=r.data;
+  const sel=document.getElementById('attClass');
+  const cur=sel.value;
+  sel.innerHTML='<option value="">全部班级</option>'+myClasses.map(c=>`<option value="${c.id}">${esc(c.name)}（${c.student_count}人）</option>`).join('');
+  if(cur)sel.value=cur;
+
+  let html='<thead><tr><th>班级</th><th>专业</th><th>年级</th><th>学生数</th><th>辅导员</th></tr></thead><tbody>';
+  if(!myClasses.length)html+='<tr><td colspan="5" style="padding:18px;text-align:center;color:var(--ink-3)">暂无班级，请先导入学生</td></tr>';
+  myClasses.forEach(c=>{
+    html+=`<tr><td>${esc(c.name)}</td><td>${esc(c.major||'')}</td><td>${esc(c.grade||'')}</td><td>${esc(c.student_count)}</td><td>${esc(c.teacher_account)}</td></tr>`;
+  });
+  document.getElementById('classTable').innerHTML=html+'</tbody>';
+}
+
+document.getElementById('btnImport').addEventListener('click',async()=>{
+  const teacher=document.getElementById('impTeacher').value.trim()||USER.account;
+  const cls=document.getElementById('impClass').value.trim();
+  const csv=document.getElementById('impText').value;
+  if(!cls){toast('请填写导入班级','err');return;}
+  if(!csv.trim()){toast('请粘贴学生名单','err');return;}
+  const r=await apiPost('/api/teacher/import',{teacher_account:teacher,class_name:cls,major:document.getElementById('impMajor').value.trim(),csv});
+  const box=document.getElementById('impResult');
+  box.classList.remove('hidden');
+  if(r.code!==0){box.textContent='导入失败：'+r.msg;toast(r.msg,'err');return;}
+  const d=r.data;
+  box.innerHTML=`导入完成：班级 <b>${esc(d.class_name)}</b>（辅导员 ${esc(d.teacher_account)}），新增 <b>${d.created.length}</b> 人，跳过 ${d.skipped.length} 人。`
+    +(d.skipped.length?`<br>跳过原因：${d.skipped.slice(0,5).map(s=>esc(s.xh)+'（'+esc(s.reason)+'）').join('、')}${d.skipped.length>5?' 等':''}`:'');
+  toast(`导入成功，新增 ${d.created.length} 人`,'ok');
+  document.getElementById('impText').value='';
+  loadMyClasses();loadStudents();
+});
+
+async function loadAttendanceRoster(){
+  const date=document.getElementById('attDate').value;
+  if(!date){toast('请选择考勤日期','err');return;}
+  const classId=document.getElementById('attClass').value;
+  const st=await apiGet('/api/teacher/students'+(classId?'?class_id='+classId:''));
+  if(st.code!==0){toast(st.msg,'err');return;}
+  const at=await apiGet('/api/teacher/attendance?date='+encodeURIComponent(date)+(classId?'&class_id='+classId:''));
+  const map={};
+  (at.code===0?at.data:[]).forEach(a=>{map[a.xh]=a;});
+  attRoster=st.data.map(s=>({xh:s.xh,xm:s.xm,bj:s.bj,status:(map[s.xh]?map[s.xh].status:'present'),remark:(map[s.xh]?map[s.xh].remark:'')}));
+  renderAttendance();
+}
+
+function renderAttendance(){
+  let html='<thead><tr><th>学号</th><th>姓名</th><th>班级</th><th>出勤</th><th>迟到</th><th>缺勤</th><th>请假</th><th>备注</th></tr></thead><tbody>';
+  if(!attRoster.length)html+='<tr><td colspan="8" style="padding:18px;text-align:center;color:var(--ink-3)">暂无学生，请先导入</td></tr>';
+  attRoster.forEach((s,i)=>{
+    const radio=n=>`<input type="radio" name="att_${i}" value="${n}" data-idx="${i}" ${s.status===n?'checked':''}>`;
+    html+=`<tr><td>${esc(s.xh)}</td><td>${esc(s.xm)}</td><td>${esc(s.bj)}</td>`
+      +`<td>${radio('present')}</td><td>${radio('late')}</td><td>${radio('absent')}</td><td>${radio('leave')}</td>`
+      +`<td><input class="imp-input" style="min-width:90px" data-remark="${i}" value="${esc(s.remark)}"></td></tr>`;
+  });
+  document.getElementById('attTable').innerHTML=html+'</tbody>';
+  document.querySelectorAll('#attTable input[type=radio]').forEach(el=>{
+    el.addEventListener('change',()=>{attRoster[Number(el.dataset.idx)].status=el.value;});
+  });
+  document.querySelectorAll('#attTable input[data-remark]').forEach(el=>{
+    el.addEventListener('input',()=>{attRoster[Number(el.dataset.remark)].remark=el.value;});
+  });
+}
+
+document.getElementById('btnLoadAtt').addEventListener('click',loadAttendanceRoster);
+document.getElementById('btnSaveAtt').addEventListener('click',async()=>{
+  const date=document.getElementById('attDate').value;
+  if(!date){toast('请选择考勤日期','err');return;}
+  if(!attRoster.length){toast('请先载入名单','err');return;}
+  const r=await apiPost('/api/teacher/attendance',{date,records:attRoster.map(s=>({xh:s.xh,status:s.status,remark:s.remark}))});
+  toast(r.code===0?'考勤已保存':'保存失败：'+r.msg,r.code===0?'ok':'err');
+});
+
+document.querySelectorAll('#mainTabs .tabbtn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('#mainTabs .tabbtn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    const t=btn.dataset.tab;
+    document.getElementById('tab-applications').classList.toggle('hidden',t!=='applications');
+    document.getElementById('tab-scores').classList.toggle('hidden',t!=='scores');
+    document.getElementById('tab-classes').classList.toggle('hidden',t!=='classes');
+    if(t==='scores')loadStudents();
+    if(t==='classes')loadMyClasses();
+  });
+});
+
+// 会话由统一登录页写入，缺失或角色不符时自动跳转
+(function(){
+  const session=ZCAuth.requireRole(['teacher','admin']);
+  if(session){
+    TOKEN=session.token;
+    USER=session.user;
+    enterMain();
+  }
+})();
+</script>
+</body>
+</html>

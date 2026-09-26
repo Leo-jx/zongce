@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>综测加分申报 · 学生填报版</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%231F5FA8'/%3E%3Ctext x='12' y='17' font-size='13' fill='%23fff' text-anchor='middle' font-family='sans-serif' font-weight='bold'%3E报%3C/text%3E%3C/svg%3E">
+<style>
+:root{--primary:#1F5FA8;--ink:#1a2433;--ink-2:#5a6b7f;--ink-3:#93a2b3;--line:#e3e9f0;--line-strong:#c9d4e0;--bg:#f4f7fa;--card:#fff;--ok:#178a5b;--warn:#b45309;--err:#c0354e}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Microsoft YaHei','PingFang SC',system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.55}
+.wrap{max-width:640px;margin:0 auto;padding:14px 12px 60px}
+.topbar{background:linear-gradient(135deg,#174e8c,#1F5FA8 60%,#2a74c4);border-radius:14px;padding:16px 18px;color:#fff;margin-bottom:12px}
+.topbar h1{font-size:19px;font-weight:700}
+.topbar .sub{font-size:12px;opacity:.85;margin-top:4px;line-height:1.5}
+.login-bar{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:12px}
+.login-bar h2{font-size:15px;margin-bottom:8px;color:var(--primary)}
+.login-bar .frow{display:grid;grid-template-columns:80px 1fr;gap:8px;align-items:center;margin-bottom:8px}
+.login-bar .fl{font-size:13px;color:var(--ink-2)}
+.login-bar input{width:100%;border:1px solid var(--line-strong);border-radius:8px;padding:8px 10px;font-size:14px}
+.login-bar input:focus{outline:0;border-color:var(--primary);box-shadow:0 0 0 3px rgba(31,95,168,.12)}
+.user-bar{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 16px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;font-size:13px}
+.user-bar .uname{color:var(--primary);font-weight:600}
+.user-bar .logout{color:var(--err);cursor:pointer;font-size:12px;border:0;background:none;padding:4px 8px;border-radius:6px}
+.user-bar .logout:hover{background:#fdf3f5}
+.steps{display:flex;gap:8px;margin:12px 0;flex-wrap:wrap}
+.step{flex:1;min-width:140px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:9px 12px;font-size:12px}
+.step b{display:block;color:var(--primary);font-size:13px;margin-bottom:2px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:12px}
+.card h2{font-size:15px;display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.card h2 .tag{font-size:11px;background:#e8f0fa;color:var(--primary);border-radius:20px;padding:2px 9px;font-weight:400}
+.card .desc{font-size:12px;color:var(--ink-3);margin-bottom:10px}
+.frow{display:grid;grid-template-columns:120px 1fr;gap:10px;align-items:center;margin-bottom:10px}
+.frow .fl{font-size:13px;color:var(--ink-2)}
+.frow input[type=text],.frow input[type=number],.frow select{
+  width:100%;border:1px solid var(--line-strong);border-radius:8px;padding:8px 10px;font-size:14px;background:#fff;color:var(--ink)}
+.frow input:focus,.frow select:focus{outline:0;border-color:var(--primary);box-shadow:0 0 0 3px rgba(31,95,168,.12)}
+.chkgroup{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.chkgroup label{display:flex;gap:7px;align-items:flex-start;border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:12.5px;cursor:pointer;line-height:1.4}
+.chkgroup label.checked{border-color:var(--primary);background:#f0f6fd;color:var(--primary)}
+.chkgroup input{margin-top:2px}
+.hint{font-size:11.5px;color:var(--ink-3);margin-top:5px}
+.summary{position:sticky;bottom:0;background:#fff;border:1px solid var(--line-strong);border-radius:12px;padding:12px 16px;margin-top:4px;box-shadow:0 -6px 20px rgba(20,40,70,.08)}
+.summary .row{display:flex;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--ink-2);margin-bottom:8px}
+.summary .row b{color:var(--primary);font-size:13px}
+.btnrow{display:flex;gap:10px}
+.btn{flex:1;border:0;border-radius:10px;padding:12px 10px;font-size:15px;font-weight:600;cursor:pointer}
+.btn.primary{background:var(--primary);color:#fff}
+.btn.ghost{background:#eef2f7;color:var(--primary);border:1px solid var(--line-strong)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn:hover{filter:brightness(1.05)}
+.proof{display:flex;gap:8px;align-items:center;margin:-2px 0 12px;padding:7px 10px;background:#f8fafc;border:1px dashed var(--line-strong);border-radius:8px;font-size:12px;color:var(--ink-2)}
+.proof .pf-tag{background:#e8f0fa;color:var(--primary);border-radius:6px;padding:2px 8px;font-size:11px;white-space:nowrap;flex:none}
+.proof .pf-btn{border:1px solid var(--line-strong);background:#fff;color:var(--primary);border-radius:7px;padding:4px 12px;font-size:12px;cursor:pointer;flex:none}
+.proof .pf-btn:hover{background:#f0f6fd}
+.proof .pf-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.proof .pf-del{display:none;border:0;background:none;color:var(--err);cursor:pointer;font-size:12px;flex:none;padding:2px 4px}
+.proof.missing{border-color:var(--err);background:#fdf3f5}
+.proof.has .pf-name{color:var(--ok)}
+.proof.has .pf-del{display:inline}
+.proof .pf-view{display:none;border:1px solid var(--line-strong);background:#fff;color:var(--primary);border-radius:7px;padding:4px 10px;font-size:12px;cursor:pointer;flex:none}
+.proof.has .pf-view{display:inline}
+@media (max-width:480px){.proof{flex-wrap:wrap}}
+.notice{font-size:11.5px;color:var(--ink-3);text-align:center;margin-top:10px;line-height:1.6}
+@media (max-width:480px){
+  .frow{grid-template-columns:1fr;gap:4px}
+  .chkgroup{grid-template-columns:1fr}
+}
+.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#1a2433;color:#fff;padding:10px 18px;border-radius:24px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .25s;z-index:99;max-width:88vw;text-align:center}
+.toast.show{opacity:1}
+.toast.warn{background:#b45309}
+.toast.err{background:#c0354e}
+.toast.ok{background:#178a5b}
+.app-status{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:12px}
+.app-status h2{font-size:15px;color:var(--primary);margin-bottom:8px}
+.app-item{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:13px}
+.app-item .app-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.app-item .app-time{font-size:11px;color:var(--ink-3)}
+.status-pending{color:var(--warn);font-weight:600}
+.status-approved{color:var(--ok);font-weight:600}
+.status-rejected{color:var(--err);font-weight:600}
+.reject-reason{margin-top:6px;padding:6px 8px;background:#fdf3f5;border:1px solid #f5c6cb;border-radius:6px;font-size:12px;color:var(--err)}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="topbar">
+    <h1>综测加分申报表</h1>
+    <div class="sub">依据《湖南民族职业学院学生综合素质测评实施办法（暂行）》· 学生在线申报</div>
+  </header>
+
+  <div id="loginSection" class="hidden">
+    <div class="login-bar">
+      <h2>正在跳转登录页...</h2>
+      <div class="desc">未检测到登录状态，即将前往统一登录页面。</div>
+    </div>
+  </div>
+
+  <div id="mainSection" class="hidden">
+    <div class="user-bar">
+      <span>欢迎，<span class="uname" id="userName"></span>（<span id="userXh"></span>）</span>
+      <button class="logout" id="logoutBtn">退出登录</button>
+    </div>
+
+    <div class="app-status" id="appStatusSection">
+      <h2>我的申请状态</h2>
+      <div id="appStatusList"><div class="hint">暂无申请记录</div></div>
+    </div>
+
+    <div class="steps">
+      <div class="step"><b>① 如实填写</b>勾选加分项，并为每一项上传证明（照片/PDF）</div>
+      <div class="step"><b>② 提交申请</b>点击下方「提交申请」</div>
+      <div class="step"><b>③ 等待审核</b>辅导员在线审核，结果实时可见</div>
+    </div>
+
+    <div class="card">
+      <h2>基本信息 <span class="tag">自动带入</span></h2>
+      <div class="desc">学号与姓名从登录账号自动带入</div>
+      <div class="frow"><div class="fl">学号</div><input type="text" id="xh" readonly></div>
+      <div class="frow"><div class="fl">姓名</div><input type="text" id="xm" readonly></div>
+    </div>
+
+    <div class="card">
+      <h2>德育加分 <span class="tag">奖励封顶 20 分</span></h2>
+      <div class="desc">基础分 80 分，以下奖励合计超过 20 分按 20 分计</div>
+      <div class="frow"><div class="fl">思想进步</div><select id="d-sixiang"></select></div>
+      <div class="proof" data-key="d-sixiang"><span class="pf-tag">证明</span><button class="pf-btn" type="button">上传证明</button><input type="file" accept="image/*,.pdf,.jpg,.jpeg,.png,.webp" hidden><span class="pf-name">未上传</span><button class="pf-del" type="button">删除</button></div>
+      <div class="frow"><div class="fl">见义勇为等表彰</div><select id="d-biaozhang"></select></div>
+      <div class="proof" data-key="d-biaozhang"><span class="pf-tag">证明</span><button class="pf-btn" type="button">上传证明</button><input type="file" accept="image/*,.pdf,.jpg,.jpeg,.png,.webp" hidden><span class="pf-name">未上传</span><button class="pf-del" type="button">删除</button></div>
+      <div class="frow"><div class="fl">团学干部任职</div><div><div class="chkgroup" id="d-ganbu"></div><div class="hint">可多选，干部类合计封顶 10 分</div></div></div>
+      <div class="proof" data-key="d-ganbu"><span class="pf-tag">证明</span><button class="pf-btn" type="button">上传证明</button><input type="file" accept="image/*,.pdf,.jpg,.jpeg,.png,.webp" hidden><span class="pf-name">未上传</span><button class="pf-del" type="button">删除</button></div>
+      <div class="frow"><div class="fl">荣誉表彰</div><div><div class="chkgroup" id="d-rongyu"></div><div class="hint">可多选，荣誉类合计封顶 10 分（征兵入伍/三支一扶/西部计划只计一次）</div></div></div>
+      <div class="proof" data-key="d-rongyu"><span class="pf-tag">证明</span><button class="pf-btn" type="button">上传证明</button><input type="file" accept="image/*,.pdf,.jpg,.jpeg,.png,.webp" hidden><span class="pf-name">未上传</span><button class="pf-del" type="button">删除</button></div>
+    </div>
+
+    <div class="card">
+      <h2>智育加分 <span class="tag">奖励封顶 20 分</span></h2>
+      <div class="desc">专业成绩由老师从教务系统导入，这里只填获奖与证书加分</div>
+      <div class="frow"><div class="fl">学科技能竞赛</div><select id="z-jingsai"></select></div>
+      <div class="proof" data-key="z-jingsai"><span class="pf-tag">证明</span><button class="pf-btn" type="button">上传证明</button><input type="file" accept="image/*,.pdf,.jpg,.jpeg,.png,.webp" hidden><span class="pf-name">未上传</span><button class="pf-del" type="button">删除</button></div>
+      <div class="frow"><div class="fl">职业技能证书</div><div><div class="chkgroup" id="z-jineng"></div><div class="hint">可多选，证书类合计封顶 20 分</div></div></div>
+      <div class="proof" data-key="z-jineng"><span class="pf-tag">证明</span><button class="pf-btn" type="button">上传证明</button><input type="file" accept="image/*,.pdf,.jpg,.jpeg,.png,.webp" hidden><span class="pf-name">未上传</span><button class="pf-del" type="button">删除</button></div>
+      <div class="frow"><div class="fl">创新创业</div><select id="z-chuangye"></select></div>
+      <div class="proof" data-key="z-chuangye"><span class="pf-tag">证明</span><button class="pf-btn" type="button">上传证明</button><input type="file" accept="image/*,.pdf,.jpg,.jpeg,.png,.webp" hidden><span class="pf-name">未上传</span><button class="pf-del" type="button">删除</button></div>
+    </div>
+
+    <div class="card">
+      <h2>体育加分 <span class="tag">奖励封顶 20 分</span></h2>
+      <div class="desc">体育成绩与体测结果由老师填写，这里只填体育类获奖（取最高一项）</div>
+      <div class="frow"><div class="fl">体育获奖</div><select id="t-jiangli"></select></div>
+      <div class="proof" data-key="t-jiangli"><span class="pf-tag">证明</span><button class="pf-btn" type="button">上传证明</button><input type="file" accept="image/*,.pdf,.jpg,.jpeg,.png,.webp" hidden><span class="pf-name">未上传</span><button class="pf-del" type="button">删除</button></div>
+    </div>
+
+    <div class="card">
+      <h2>美育加分 <span class="tag">奖励封顶 20 分</span></h2>
+      <div class="desc">文艺竞赛、大型文艺演出获奖（取最高一项）</div>
+      <div class="frow"><div class="fl">文艺竞赛/演出</div><select id="m-jiangli"></select></div>
+      <div class="proof" data-key="m-jiangli"><span class="pf-tag">证明</span><button class="pf-btn" type="button">上传证明</button><input type="file" accept="image/*,.pdf,.jpg,.jpeg,.png,.webp" hidden><span class="pf-name">未上传</span><button class="pf-del" type="button">删除</button></div>
+    </div>
+
+    <div class="card">
+      <h2>劳育加分 <span class="tag">奖励封顶 20 分</span></h2>
+      <div class="desc">志愿服务 1 次记 1 分（封顶 10 分）；献血每次 5 分；社会实践与表彰取最高一项</div>
+      <div class="frow"><div class="fl">志愿服务次数</div><input type="number" id="l-zhiyuan" min="0" max="99" placeholder="0"></div>
+      <div class="proof" data-key="l-zhiyuan"><span class="pf-tag">证明</span><button class="pf-btn" type="button">上传证明</button><input type="file" accept="image/*,.pdf,.jpg,.jpeg,.png,.webp" hidden><span class="pf-name">未上传</span><button class="pf-del" type="button">删除</button></div>
+      <div class="frow"><div class="fl">无偿献血次数</div><input type="number" id="l-xianxue" min="0" max="99" placeholder="0"></div>
+      <div class="proof" data-key="l-xianxue"><span class="pf-tag">证明</span><button class="pf-btn" type="button">上传证明</button><input type="file" accept="image/*,.pdf,.jpg,.jpeg,.png,.webp" hidden><span class="pf-name">未上传</span><button class="pf-del" type="button">删除</button></div>
+      <div class="frow"><div class="fl">社会实践/表彰</div><select id="l-shehui"></select></div>
+      <div class="proof" data-key="l-shehui"><span class="pf-tag">证明</span><button class="pf-btn" type="button">上传证明</button><input type="file" accept="image/*,.pdf,.jpg,.jpeg,.png,.webp" hidden><span class="pf-name">未上传</span><button class="pf-del" type="button">删除</button></div>
+    </div>
+
+    <div class="card">
+      <h2>违纪处分 <span class="tag">选填</span></h2>
+      <div class="desc">如本学期受过处分请如实选择，无则留默认"无"</div>
+      <div class="frow"><div class="fl">处分情况</div><select id="k-chufen"></select></div>
+      <div class="proof" data-key="k-chufen" data-optional="1"><span class="pf-tag">证明</span><button class="pf-btn" type="button">上传证明</button><input type="file" accept="image/*,.pdf,.jpg,.jpeg,.png,.webp" hidden><span class="pf-name">未上传</span><button class="pf-del" type="button">删除</button></div>
+    </div>
+
+    <div class="summary">
+      <div class="row">本次申报奖励合计：德育 <b id="pv-deyu">0</b> · 智育 <b id="pv-zhiyu">0</b> · 体育 <b id="pv-tiyu">0</b> · 美育 <b id="pv-meiyu">0</b> · 劳育 <b id="pv-laoyu">0</b><span id="pv-koufen"></span></div>
+      <div class="btnrow">
+        <button class="btn primary" id="btnSubmit">提交申请</button>
+        <button class="btn ghost" id="btnReset">清空重填</button>
+      </div>
+    </div>
+
+    <div class="notice">提交后辅导员将在线审核，审核结果在本页「我的申请状态」区实时查看<br>选了加分项必须上传对应证明材料（每项一份，≤4MB，仅图片/PDF）</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script>
+const API = window.API_BASE || '';
+let TOKEN = '';
+let USER = null;
+
+const OPT = {
+  sixiang: [['0','无'],['1','入党积极分子 +1'],['2','中共预备党员 +2'],['3','中共党员 +3']],
+  biaozhang: [['0','无'],['5','校级表彰 +5'],['6','市级表彰 +6'],['8','省级表彰 +8'],['10','国家级表彰 +10']],
+  ganbu: [['8','校级学生组织主席团/团委副书记 +8'],['6','校级学生组织部门正副职 +6'],['3','校级学生组织部门干事 +3'],['6','院级学生组织主席团/团总支副书记 +6'],['4','院级学生组织部门正副职 +4'],['3','班级班干部 +3'],['2','寝室长/信息员 +2']],
+  rongyu: [['10','国家部委级荣誉 +10'],['6','省级荣誉 +6'],['4','市级荣誉 +4'],['2','校级荣誉 +2'],['10','征兵入伍/三支一扶/西部计划 +10（计一次）']],
+  jingsai: [['0','无'],['20','Ⅰ类 特等奖 +20'],['18','Ⅰ类 一等奖 +18'],['16','Ⅰ类 二等奖 +16'],['14','Ⅰ类 三等奖 +14'],['18','Ⅱ类 特等奖 +18'],['15','Ⅱ类 一等奖 +15'],['12','Ⅱ类 二等奖 +12'],['10','Ⅱ类 三等奖 +10'],['15','Ⅲ类 特等奖 +15'],['12','Ⅲ类 一等奖 +12'],['10','Ⅲ类 二等奖 +10'],['8','Ⅲ类 三等奖 +8'],['12','Ⅳ类 特等奖 +12'],['10','Ⅳ类 一等奖 +10'],['8','Ⅳ类 二等奖 +8'],['6','Ⅳ类 三等奖 +6'],['5','校赛 特等奖 +5'],['3','校赛 一等奖 +3'],['2','校赛 二等奖 +2'],['1','校赛 三等奖 +1']],
+  jineng: [['4','大学英语四级 +4'],['8','大学英语六级 +8'],['3','计算机二级 +3'],['5','计算机三级 +5'],['3','普通话二甲 +3'],['5','普通话一乙 +5'],['8','普通话一甲 +8'],['3','职业技能初级 +3'],['5','职业技能中级 +5'],['8','职业技能高级 +8']],
+  chuangye: [['0','无'],['10','自主创业（完成登记并实际运作）+10']],
+  tiyuJiangli: [['0','无'],['2','校级奖项 +2'],['4','市级奖项 +4'],['6','省级奖项 +6'],['10','国家级奖项 +10']],
+  meiyuJiangli: [['0','无'],['20','Ⅰ类 特等奖 +20'],['18','Ⅰ类 一等奖 +18'],['16','Ⅰ类 二等奖 +16'],['14','Ⅰ类 三等奖 +14'],['18','Ⅱ类 特等奖 +18'],['15','Ⅱ类 一等奖 +15'],['12','Ⅱ类 二等奖 +12'],['10','Ⅱ类 三等奖 +10'],['15','Ⅲ类 特等奖 +15'],['12','Ⅲ类 一等奖 +12'],['10','Ⅲ类 二等奖 +10'],['8','Ⅲ类 三等奖 +8'],['12','Ⅳ类 特等奖 +12'],['10','Ⅳ类 一等奖 +10'],['8','Ⅳ类 二等奖 +8'],['6','Ⅳ类 三等奖 +6'],['5','校赛 特等奖 +5'],['3','校赛 一等奖 +3'],['2','校赛 二等奖 +2'],['1','校赛 三等奖 +1']],
+  shehui: [['0','无'],['10','国家级表彰（负责人/先进个人/报告获奖）+10'],['8','省级表彰（负责人/先进个人/报告获奖）+8'],['6','市级表彰（负责人/先进个人/报告获奖）+6'],['4','校级表彰（负责人/先进个人/报告获奖）+4'],['5','国家级先进集体成员 +5'],['4','省级先进集体成员 +4'],['3','市级先进集体成员 +3'],['2','校级先进集体成员 +2'],['2','完成社会实践并提交报告（每份）+2']],
+  chufen: [['0','无'],['30','公安查处/违法违纪等 -30'],['20','留校察看 -20'],['15','记过 -15'],['10','严重警告 -10'],['7','警告 -7'],['5','全校通报批评 -5'],['2','学院通报批评 -2']]
+};
+
+function fillSelect(id, arr, saved){
+  const sel = document.getElementById(id);
+  sel.innerHTML = arr.map(o=>'<option value="'+o[0]+'"'+(String(saved)===o[0]?' selected':'')+'>'+o[1]+'</option>').join('');
+}
+function fillChecks(id, arr, savedArr){
+  const el = document.getElementById(id);
+  const saved = (savedArr||[]).map(String);
+  el.innerHTML = arr.map(o=>'<label><input type="checkbox" value="'+o[0]+'"'+(saved.indexOf(o[0])>=0?' checked':'')+'><span>'+o[1]+'</span></label>').join('');
+}
+
+const LS_KEY = 'zongce_apply_v1';
+const PROOF_LABEL = {
+  'd-sixiang':'思想进步','d-biaozhang':'见义勇为等表彰','d-ganbu':'团学干部任职','d-rongyu':'荣誉表彰',
+  'z-jingsai':'学科技能竞赛','z-jineng':'职业技能证书','z-chuangye':'创新创业',
+  't-jiangli':'体育获奖','m-jiangli':'文艺竞赛/演出',
+  'l-zhiyuan':'志愿服务','l-xianxue':'无偿献血','l-shehui':'社会实践/表彰','k-chufen':'违纪处分'
+};
+const PROOF_MAX = 4*1024*1024;
+let PROOF_MAP = {};
+let PROOF_ID_MAP = {};
+
+function hasAdd(d, key){
+  if(key==='d-sixiang') return d.deyu.sixiang>0;
+  if(key==='d-biaozhang') return d.deyu.biaozhang>0;
+  if(key==='d-ganbu') return d.deyu.ganbu.length>0;
+  if(key==='d-rongyu') return d.deyu.rongyu.length>0;
+  if(key==='z-jingsai') return d.zhiyu.jingsai>0;
+  if(key==='z-jineng') return d.zhiyu.jineng.length>0;
+  if(key==='z-chuangye') return d.zhiyu.chuangye>0;
+  if(key==='t-jiangli') return d.tiyu.jiangli>0;
+  if(key==='m-jiangli') return d.meiyu.jiangli>0;
+  if(key==='l-zhiyuan') return d.laoyu.zhiyuanCishu>0;
+  if(key==='l-xianxue') return d.laoyu.xianxue>0;
+  if(key==='l-shehui') return d.laoyu.shehui>0;
+  if(key==='k-chufen') return d.koufen.chufen>0;
+  return false;
+}
+function refreshProofUI(key){
+  const row = document.querySelector('.proof[data-key="'+key+'"]');
+  if(!row) return;
+  const p = PROOF_MAP[key];
+  row.querySelector('.pf-name').textContent = p ? p.name : '未上传';
+  row.classList.toggle('has', !!p);
+  row.classList.remove('missing');
+  const d = collect();
+  if(!p && hasAdd(d, key) && !row.dataset.optional) row.classList.add('missing');
+}
+function bindProofs(){
+  document.querySelectorAll('.proof').forEach(row=>{
+    const key = row.dataset.key;
+    const btn = row.querySelector('.pf-btn');
+    const inp = row.querySelector('input[type=file]');
+    const del = row.querySelector('.pf-del');
+    btn.addEventListener('click', ()=>inp.click());
+    inp.addEventListener('change', async ()=>{
+      const f = inp.files[0];
+      if(!f) return;
+      if(f.size > PROOF_MAX){ toast('证明文件过大（超过 4MB），请压缩后重新选择','err'); inp.value=''; return; }
+      if(!f.type.startsWith('image/') && f.type !== 'application/pdf'){
+        toast('仅支持图片和PDF文件','err'); inp.value=''; return;
+      }
+      toast('正在上传...','warn');
+      try{
+        const fd = new FormData();
+        fd.append('files', f);
+        fd.append('item_key', key);
+        const resp = await fetch(API+'/api/upload', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer '+TOKEN },
+          body: fd
+        });
+        const result = await resp.json();
+        if(result.code !== 0){ toast('上传失败: '+result.msg,'err'); inp.value=''; return; }
+        const uploaded = result.data[0];
+        PROOF_MAP[key] = { name: f.name, proof_id: uploaded.id, url: uploaded.file_path };
+        PROOF_ID_MAP[key] = uploaded.id;
+        refreshProofUI(key); refreshPreview();
+        toast('证明上传成功','ok');
+      }catch(e){
+        toast('上传失败: '+e.message,'err'); inp.value='';
+      }
+    });
+    del.addEventListener('click', ()=>{
+      delete PROOF_MAP[key]; delete PROOF_ID_MAP[key]; inp.value='';
+      refreshProofUI(key); refreshPreview();
+    });
+    refreshProofUI(key);
+  });
+}
+function missingProofs(){
+  const d = collect();
+  const miss = [];
+  Object.keys(PROOF_LABEL).forEach(key=>{
+    const row = document.querySelector('.proof[data-key="'+key+'"]');
+    if(row && row.dataset.optional) return;
+    if(hasAdd(d, key) && !PROOF_MAP[key]) miss.push(PROOF_LABEL[key]);
+  });
+  return miss;
+}
+function collect(){
+  return {
+    xh: document.getElementById('xh').value.trim(),
+    xm: document.getElementById('xm').value.trim(),
+    deyu: {
+      sixiang: +document.getElementById('d-sixiang').value || 0,
+      biaozhang: +document.getElementById('d-biaozhang').value || 0,
+      ganbu: Array.from(document.querySelectorAll('#d-ganbu input:checked')).map(i=>i.value),
+      rongyu: Array.from(document.querySelectorAll('#d-rongyu input:checked')).map(i=>i.value)
+    },
+    zhiyu: {
+      jingsai: +document.getElementById('z-jingsai').value || 0,
+      jineng: Array.from(document.querySelectorAll('#z-jineng input:checked')).map(i=>i.value),
+      chuangye: +document.getElementById('z-chuangye').value || 0
+    },
+    tiyu: { jiangli: +document.getElementById('t-jiangli').value || 0 },
+    meiyu: { jiangli: +document.getElementById('m-jiangli').value || 0 },
+    laoyu: {
+      zhiyuanCishu: Math.max(0, +document.getElementById('l-zhiyuan').value || 0),
+      xianxue: Math.max(0, +document.getElementById('l-xianxue').value || 0),
+      qinshi: 0,
+      shehui: +document.getElementById('l-shehui').value || 0
+    },
+    koufen: { chufen: +document.getElementById('k-chufen').value || 0 }
+  };
+}
+function saveDraft(){
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(collect())); }catch(e){}
+}
+function loadDraft(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(!raw) return;
+    const d = JSON.parse(raw);
+    if(d.deyu){
+      fillSelect('d-sixiang', OPT.sixiang, d.deyu.sixiang);
+      fillSelect('d-biaozhang', OPT.biaozhang, d.deyu.biaozhang);
+      fillChecks('d-ganbu', OPT.ganbu, d.deyu.ganbu);
+      fillChecks('d-rongyu', OPT.rongyu, d.deyu.rongyu);
+    }
+    if(d.zhiyu){
+      fillSelect('z-jingsai', OPT.jingsai, d.zhiyu.jingsai);
+      fillChecks('z-jineng', OPT.jineng, d.zhiyu.jineng);
+      fillSelect('z-chuangye', OPT.chuangye, d.zhiyu.chuangye);
+    }
+    if(d.tiyu) fillSelect('t-jiangli', OPT.tiyuJiangli, d.tiyu.jiangli);
+    if(d.meiyu) fillSelect('m-jiangli', OPT.meiyuJiangli, d.meiyu.jiangli);
+    if(d.laoyu){
+      document.getElementById('l-zhiyuan').value = d.laoyu.zhiyuanCishu||0;
+      document.getElementById('l-xianxue').value = d.laoyu.xianxue||0;
+      fillSelect('l-shehui', OPT.shehui, d.laoyu.shehui);
+    }
+    if(d.koufen) fillSelect('k-chufen', OPT.chufen, d.koufen.chufen);
+  }catch(e){}
+}
+
+function refreshPreview(){
+  const d = collect();
+  const deyu = Math.min(
+    (d.deyu.sixiang + d.deyu.biaozhang + d.deyu.ganbu.reduce((a,b)=>a+(+b||0),0) + d.deyu.rongyu.reduce((a,b)=>a+(+b||0),0)), 20);
+  const zhiyu = Math.min(
+    d.zhiyu.jingsai + d.zhiyu.jineng.reduce((a,b)=>a+(+b||0),0) + d.zhiyu.chuangye, 20);
+  const tiyu = Math.min(d.tiyu.jiangli, 20);
+  const meiyu = Math.min(d.meiyu.jiangli, 20);
+  const laoyu = Math.min(
+    Math.min(d.laoyu.zhiyuanCishu, 10) + d.laoyu.xianxue*5 + d.laoyu.shehui, 20);
+  document.getElementById('pv-deyu').textContent = deyu;
+  document.getElementById('pv-zhiyu').textContent = zhiyu;
+  document.getElementById('pv-tiyu').textContent = tiyu;
+  document.getElementById('pv-meiyu').textContent = meiyu;
+  document.getElementById('pv-laoyu').textContent = laoyu;
+  document.getElementById('pv-koufen').textContent = d.koufen.chufen ? ' · 扣分 '+d.koufen.chufen : '';
+  saveDraft();
+}
+
+async function submitApplication(){
+  const d = collect();
+  if(!d.xh){ toast('学号信息缺失，请重新登录','err'); return; }
+  if(!d.xm){ toast('姓名信息缺失，请重新登录','err'); return; }
+  const miss = missingProofs();
+  if(miss.length){
+    toast('请为以下加分项上传证明：'+miss.slice(0,3).join('、')+(miss.length>3?' 等 '+miss.length+' 项':''),'err');
+    return;
+  }
+  const btn = document.getElementById('btnSubmit');
+  btn.disabled = true;
+  btn.textContent = '提交中...';
+  try{
+    const resp = await fetch(API+'/api/student/applications', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer '+TOKEN
+      },
+      body: JSON.stringify(d)
+    });
+    const result = await resp.json();
+    if(result.code !== 0){
+      toast('提交失败: '+result.msg,'err');
+      btn.disabled = false;
+      btn.textContent = '提交申请';
+      return;
+    }
+    toast('申请提交成功！等待辅导员审核','ok');
+    try{ localStorage.removeItem(LS_KEY); }catch(e){}
+    PROOF_MAP = {};
+    PROOF_ID_MAP = {};
+    loadAppStatus();
+  }catch(e){
+    toast('提交失败: '+e.message,'err');
+  }
+  btn.disabled = false;
+  btn.textContent = '提交申请';
+}
+
+async function loadAppStatus(){
+  try{
+    const resp = await fetch(API+'/api/student/applications', {
+      headers: { 'Authorization': 'Bearer '+TOKEN }
+    });
+    const result = await resp.json();
+    if(result.code !== 0) return;
+    const apps = result.data;
+    const el = document.getElementById('appStatusList');
+    if(!apps || !apps.length){
+      el.innerHTML = '<div class="hint">暂无申请记录</div>';
+      return;
+    }
+    el.innerHTML = apps.map(a=>{
+      const statusText = a.status==='pending' ? '待审核' : (a.status==='approved' ? '已通过' : '已驳回');
+      const statusClass = 'status-'+a.status;
+      const time = a.created_at ? new Date(a.created_at).toLocaleString('zh-CN') : '';
+      let html = '<div class="app-item"><div class="app-head"><span class="'+statusClass+'">'+statusText+'</span><span class="app-time">'+time+'</span></div>';
+      if(a.status==='rejected' && a.reject_reason){
+        html += '<div class="reject-reason">驳回理由：'+esc(a.reject_reason)+'</div>';
+      }
+      html += '</div>';
+      return html;
+    }).join('');
+  }catch(e){}
+}
+
+function esc(x){
+  return String(x||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+let toastTimer = null;
+function toast(msg, type){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (type ? ' '+type : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>{ t.className = 'toast'; }, 2400);
+}
+
+function enterMain(){
+  const ls = document.getElementById('loginSection');
+  if(ls) ls.classList.add('hidden');
+  document.getElementById('mainSection').classList.remove('hidden');
+  document.getElementById('userName').textContent = USER.name;
+  document.getElementById('userXh').textContent = USER.account;
+  document.getElementById('xh').value = USER.account;
+  document.getElementById('xm').value = USER.name;
+  loadDraft();
+  refreshPreview();
+  bindProofs();
+  loadAppStatus();
+}
+
+function doLogout(){
+  ZCAuth.clearSession();
+  ZCAuth.goLogin();
+}
+
+fillSelect('d-sixiang', OPT.sixiang, 0);
+fillSelect('d-biaozhang', OPT.biaozhang, 0);
+fillChecks('d-ganbu', OPT.ganbu, []);
+fillChecks('d-rongyu', OPT.rongyu, []);
+fillSelect('z-jingsai', OPT.jingsai, 0);
+fillChecks('z-jineng', OPT.jineng, []);
+fillSelect('z-chuangye', OPT.chuangye, 0);
+fillSelect('t-jiangli', OPT.tiyuJiangli, 0);
+fillSelect('m-jiangli', OPT.meiyuJiangli, 0);
+fillSelect('l-shehui', OPT.shehui, 0);
+fillSelect('k-chufen', OPT.chufen, 0);
+
+document.querySelectorAll('input,select').forEach(el=>{
+  el.addEventListener('input', refreshPreview);
+  el.addEventListener('change', refreshPreview);
+});
+document.querySelectorAll('.chkgroup input[type=checkbox]').forEach(cb=>{
+  cb.addEventListener('change', ()=>{
+    cb.closest('label').classList.toggle('checked', cb.checked);
+  });
+});
+document.querySelectorAll('.chkgroup input[type=checkbox]:checked').forEach(cb=>{
+  cb.closest('label').classList.add('checked');
+});
+
+document.getElementById('logoutBtn').addEventListener('click', doLogout);
+document.getElementById('btnSubmit').addEventListener('click', submitApplication);
+document.getElementById('btnReset').addEventListener('click', ()=>{
+  if(!confirm('确定清空本次申报内容与已上传证明？此操作不可恢复。')) return;
+  try{ localStorage.removeItem(LS_KEY); }catch(e){}
+  PROOF_MAP = {};
+  PROOF_ID_MAP = {};
+  document.getElementById('l-zhiyuan').value = '';
+  document.getElementById('l-xianxue').value = '';
+  fillSelect('d-sixiang', OPT.sixiang, 0);
+  fillSelect('d-biaozhang', OPT.biaozhang, 0);
+  fillChecks('d-ganbu', OPT.ganbu, []);
+  fillChecks('d-rongyu', OPT.rongyu, []);
+  fillSelect('z-jingsai', OPT.jingsai, 0);
+  fillChecks('z-jineng', OPT.jineng, []);
+  fillSelect('z-chuangye', OPT.chuangye, 0);
+  fillSelect('t-jiangli', OPT.tiyuJiangli, 0);
+  fillSelect('m-jiangli', OPT.meiyuJiangli, 0);
+  fillSelect('l-shehui', OPT.shehui, 0);
+  fillSelect('k-chufen', OPT.chufen, 0);
+  document.querySelectorAll('.chkgroup input[type=checkbox]').forEach(cb=>{
+    cb.closest('label').classList.toggle('checked', cb.checked);
+  });
+  document.querySelectorAll('.proof').forEach(row=>refreshProofUI(row.dataset.key));
+  refreshPreview();
+  toast('已清空，可以重新填写','ok');
+});
+
+// 会话由统一登录页写入，缺失或角色不符时自动跳转
+(function(){
+  const session = ZCAuth.requireRole(['student']);
+  if(session){
+    TOKEN = session.token;
+    USER = session.user;
+    enterMain();
+  }
+})();
+</script>
+</body>
+</html>

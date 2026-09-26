@@ -1,0 +1,20 @@
+# 综测加分申报与审核系统 · 后端（Cloudflare Worker）
+name = "zongce-api"
+main = "src/index.js"
+compatibility_date = "2024-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# 前端 Cloudflare Pages 的域名，用于 CORS 白名单；留 "*" 表示允许任意来源
+ALLOWED_ORIGIN = "*"
+
+# D1 数据库：部署前把 database_id 换成 `wrangler d1 create zongce-db` 返回的真实 ID
+[[d1_databases]]
+binding = "DB"
+database_name = "zongce-db"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+
+# R2 存储桶：存放学生上传的证明材料
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "zongce-proofs"

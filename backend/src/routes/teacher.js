@@ -1,0 +1,463 @@
+/**
+ * 辅导员 / 教师端接口（/api/teacher/**）。
+ *
+ * 数据归属：辅导员只能查看和操作自己负责的班级（students.fdy = 自己的教师号）；
+ * 超级管理员不受归属限制。每个接口都先校验权限点（见 src/rbac.js）。
+ */
+import bcrypt from 'bcryptjs';
+import { ok, fail } from '../http.js';
+import { now } from '../db.js';
+import { SCORE_FIELDS } from '../calc.js';
+import { requirePerm } from '../rbac.js';
+
+const APPS_PATH = '/api/teacher/applications';
+const APP_RE = /^\/api\/teacher\/applications\/(\d+)$/;
+const REVIEW_RE = /^\/api\/teacher\/applications\/(\d+)\/review$/;
+const STUDENTS_PATH = '/api/teacher/students';
+const STUDENT_RE = /^\/api\/teacher\/students\/([^/]+)$/;
+const CLASSES_PATH = '/api/teacher/classes';
+const CLASS_RE = /^\/api\/teacher\/classes\/(\d+)$/;
+const ATTENDANCE_PATH = '/api/teacher/attendance';
+const ATTENDANCE_RE = /^\/api\/teacher\/attendance\/(\d+)$/;
+
+const DEFAULT_STUDENT_PASSWORD = '123456';
+const ATTENDANCE_STATUS = ['present', 'late', 'absent', 'leave'];
+
+/** 允许教师直接改写的数值字段 */
+const NUM_FIELDS = [
+  'zhuanye_score', 'tiyu_chengji', 'tiyu_tice', 'deyu_sixiang', 'deyu_biaozhang', 'deyu_custom',
+  'zhiyu_jingsai', 'zhiyu_chuangye', 'zhiyu_custom', 'tiyu_jiangli', 'tiyu_custom',
+  'meiyu_jiangli', 'meiyu_custom', 'laoyu_zhiyuanCishu', 'laoyu_xianxue', 'laoyu_qinshi',
+  'laoyu_shehui', 'laoyu_custom', 'koufen_chufen', 'koufen_richang',
+];
+
+/** 学生基本信息字段 */
+const INFO_FIELDS = ['xm', 'zhuanye', 'bj'];
+
+/** 以 JSON 数组形式存储的字段 */
+const JSON_FIELDS = ['deyu_ganbu', 'deyu_rongyu', 'zhiyu_jineng'];
+
+/**
+ * 归属过滤：超级管理员看全部，辅导员只看自己的。
+ * @returns {{sql:string, params:any[]}} 追加到 WHERE 后的片段
+ */
+function ownerScope(ctx, alias = 's') {
+  if (ctx.user.role === 'admin') return { sql: '', params: [] };
+  return { sql: ` AND ${alias}.fdy = ?`, params: [ctx.user.account] };
+}
+
+/** 校验班级是否归属当前辅导员 */
+async function assertOwnClass(ctx, classId) {
+  const cls = await ctx.db.queryOne('SELECT * FROM classes WHERE id = ?', [classId]);
+  if (!cls) return { error: fail('班级不存在', 404, ctx.env) };
+  if (ctx.user.role !== 'admin' && cls.teacher_account !== ctx.user.account) {
+    return { error: fail('只能操作自己负责的班级', 403, ctx.env) };
+  }
+  return { cls };
+}
+
+/** 校验学生是否归属当前辅导员 */
+async function assertOwnStudent(ctx, xh) {
+  const stu = await ctx.db.queryOne('SELECT * FROM students WHERE xh = ?', [xh]);
+  if (!stu) return { error: fail('学生不存在', 404, ctx.env) };
+  if (ctx.user.role !== 'admin' && stu.fdy !== ctx.user.account) {
+    return { error: fail('只能操作自己负责的学生', 403, ctx.env) };
+  }
+  return { stu };
+}
+
+/** 解析 CSV：学号,姓名[,专业][,班级]，支持逗号/中文逗号/制表符分隔，首行表头自动跳过 */
+function parseImportRows(csv) {
+  return csv.split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => line.split(/[,，\t]/).map(s => s.trim()))
+    .filter(cols => cols[0] && !/^学号/.test(cols[0]));
+}
+
+export async function handleTeacher(path, method, ctx) {
+  const { request, env, db, searchParams } = ctx;
+
+  // ===================== 班级管理 =====================
+  if (path === CLASSES_PATH && method === 'GET') {
+    const denied = requirePerm(ctx, 'class:read'); if (denied) return denied;
+    let sql = `SELECT c.*, (SELECT COUNT(*) FROM students s WHERE s.class_id = c.id) AS student_count
+               FROM classes c WHERE 1=1`;
+    const params = [];
+    if (ctx.user.role !== 'admin') { sql += ' AND c.teacher_account = ?'; params.push(ctx.user.account); }
+    sql += ' ORDER BY c.name';
+    return ok(await db.query(sql, params), env);
+  }
+
+  if (path === CLASSES_PATH && method === 'POST') {
+    const denied = requirePerm(ctx, 'class:write'); if (denied) return denied;
+    const d = await request.json();
+    if (!d.name) return fail('班级名称不能为空', 400, env);
+    const teacherAccount = ctx.user.role === 'admin' && d.teacher_account ? d.teacher_account : ctx.user.account;
+
+    const exists = await db.queryOne('SELECT id FROM classes WHERE name = ?', [d.name]);
+    if (exists) return fail('班级已存在', 400, env);
+
+    const r = await db.insert(
+      'INSERT INTO classes (name, teacher_account, major, grade, created_at) VALUES (?, ?, ?, ?, ?)',
+      [d.name, teacherAccount, d.major || '', d.grade || '', now()]
+    );
+    return ok({ id: r.insertId }, env);
+  }
+
+  const cm = path.match(CLASS_RE);
+  if (cm && (method === 'PUT' || method === 'DELETE')) {
+    const denied = requirePerm(ctx, 'class:write'); if (denied) return denied;
+    const { cls, error } = await assertOwnClass(ctx, cm[1]);
+    if (error) return error;
+
+    if (method === 'PUT') {
+      const d = await request.json();
+      const sets = [];
+      const params = [];
+      for (const f of ['name', 'major', 'grade']) {
+        if (d[f] !== undefined) { sets.push(f + ' = ?'); params.push(d[f]); }
+      }
+      if (d.teacher_account && ctx.user.role === 'admin') { sets.push('teacher_account = ?'); params.push(d.teacher_account); }
+      if (sets.length === 0) return fail('无更新字段', 400, env);
+      params.push(cls.id);
+
+      await db.update('UPDATE classes SET ' + sets.join(', ') + ' WHERE id = ?', params);
+      if (d.name && d.name !== cls.name) {
+        await db.update('UPDATE students SET bj = ? WHERE class_id = ?', [d.name, cls.id]);
+      }
+      return ok(null, env);
+    }
+
+    const used = await db.queryOne('SELECT COUNT(*) AS c FROM students WHERE class_id = ?', [cls.id]);
+    if (used && used.c > 0) return fail('该班级下还有学生，请先移除或转班', 400, env);
+    await db.run('DELETE FROM classes WHERE id = ?', [cls.id]);
+    return ok(null, env);
+  }
+
+  // ===================== 学生导入 =====================
+  if (path === '/api/teacher/import' && method === 'POST') {
+    const denied = requirePerm(ctx, 'student:write'); if (denied) return denied;
+    const d = await request.json();
+
+    // 教师号：辅导员只能用本人教师号导入，管理员可代指定
+    const teacherAccount = (ctx.user.role === 'admin' && d.teacher_account) ? d.teacher_account : ctx.user.account;
+    const teacher = await db.queryOne('SELECT account, name FROM users WHERE account = ? AND role = ?', [teacherAccount, 'teacher']);
+    if (!teacher) return fail('教师号不存在：' + teacherAccount, 400, env);
+
+    const rows = Array.isArray(d.rows) ? d.rows : parseImportRows(String(d.csv || ''));
+    if (rows.length === 0) return fail('没有可导入的数据', 400, env);
+
+    const className = d.class_name || (rows.find(r => r.bj) || {}).bj || '';
+    if (!className) return fail('请指定班级名称', 400, env);
+
+    // 找到或创建班级，并校验归属
+    let cls = await db.queryOne('SELECT * FROM classes WHERE name = ?', [className]);
+    if (!cls) {
+      const r = await db.insert(
+        'INSERT INTO classes (name, teacher_account, major, grade, created_at) VALUES (?, ?, ?, ?, ?)',
+        [className, teacherAccount, d.major || '', d.grade || '', now()]
+      );
+      cls = { id: r.insertId, name: className, teacher_account: teacherAccount };
+    } else if (cls.teacher_account !== teacherAccount) {
+      return fail(`班级「${className}」归属其他辅导员（${cls.teacher_account}）`, 403, env);
+    }
+
+    const hash = bcrypt.hashSync(DEFAULT_STUDENT_PASSWORD, 10);
+    const created = [];
+    const skipped = [];
+
+    for (const row of rows) {
+      const xh = String(row.xh || row[0] || '').trim();
+      const xm = String(row.xm || row[1] || '').trim();
+      if (!xh || !xm) { skipped.push({ xh, reason: '学号或姓名为空' }); continue; }
+
+      const existed = await db.queryOne('SELECT id FROM students WHERE xh = ?', [xh]);
+      if (existed) { skipped.push({ xh, reason: '学号已存在' }); continue; }
+
+      const zhuanye = String(row.zhuanye || row[2] || d.major || '').trim();
+      await db.insert(
+        'INSERT OR IGNORE INTO users (role, account, password_hash, name, status, created_at) VALUES (?, ?, ?, ?, 1, ?)',
+        ['student', xh, hash, xm, now()]
+      );
+      await db.insert(
+        `INSERT INTO students (xh, xm, zhuanye, bj, fdy, class_id, zhuanye_score, deyu_ganbu, deyu_rongyu, zhiyu_jineng)
+         VALUES (?, ?, ?, ?, ?, ?, 80, '[]', '[]', '[]')`,
+        [xh, xm, zhuanye, className, teacherAccount, cls.id]
+      );
+      created.push(xh);
+    }
+
+    return ok({ class_id: cls.id, class_name: className, teacher_account: teacherAccount, created, skipped }, env);
+  }
+
+  // ===================== 学生信息与成绩 =====================
+  if (path === STUDENTS_PATH && method === 'GET') {
+    const denied = requirePerm(ctx, 'student:read'); if (denied) return denied;
+    const { bj, xh, xm, class_id } = Object.fromEntries(searchParams);
+    let sql = 'SELECT * FROM students s WHERE 1=1';
+    const params = [];
+    const scope = ownerScope(ctx);
+    sql += scope.sql; params.push(...scope.params);
+    if (bj) { sql += ' AND s.bj = ?'; params.push(bj); }
+    if (class_id) { sql += ' AND s.class_id = ?'; params.push(class_id); }
+    if (xh) { sql += ' AND s.xh = ?'; params.push(xh); }
+    if (xm) { sql += ' AND s.xm LIKE ?'; params.push('%' + xm + '%'); }
+    sql += ' ORDER BY s.xh';
+    return ok(await db.query(sql, params), env);
+  }
+
+  if (path === STUDENTS_PATH && method === 'POST') {
+    const denied = requirePerm(ctx, 'student:write'); if (denied) return denied;
+    const d = await request.json();
+    if (!d.xh || !d.xm) return fail('学号和姓名必填', 400, env);
+    if (await db.queryOne('SELECT id FROM students WHERE xh = ?', [d.xh])) return fail('学号已存在', 400, env);
+
+    const classId = d.class_id ? Number(d.class_id) : null;
+    let className = d.bj || '';
+    let teacherAccount = ctx.user.account;
+    if (classId) {
+      const { cls, error } = await assertOwnClass(ctx, classId);
+      if (error) return error;
+      className = cls.name;
+      teacherAccount = cls.teacher_account;
+    }
+
+    const hash = bcrypt.hashSync(DEFAULT_STUDENT_PASSWORD, 10);
+    await db.insert(
+      'INSERT OR IGNORE INTO users (role, account, password_hash, name, status, created_at) VALUES (?, ?, ?, ?, 1, ?)',
+      ['student', d.xh, hash, d.xm, now()]
+    );
+    const r = await db.insert(
+      `INSERT INTO students (xh, xm, zhuanye, bj, fdy, class_id, zhuanye_score, deyu_ganbu, deyu_rongyu, zhiyu_jineng)
+       VALUES (?, ?, ?, ?, ?, ?, ?, '[]', '[]', '[]')`,
+      [d.xh, d.xm, d.zhuanye || '', className, teacherAccount, classId, Number(d.zhuanye_score) || 80]
+    );
+    return ok({ id: r.insertId }, env);
+  }
+
+  const sm = path.match(STUDENT_RE);
+  if (sm && method === 'GET') {
+    const denied = requirePerm(ctx, 'student:read'); if (denied) return denied;
+    const { stu, error } = await assertOwnStudent(ctx, sm[1]);
+    if (error) return error;
+    return ok(stu, env);
+  }
+
+  if (sm && method === 'PUT') {
+    const denied = requirePerm(ctx, 'student:write'); if (denied) return denied;
+    const { stu, error } = await assertOwnStudent(ctx, sm[1]);
+    if (error) return error;
+
+    const d = await request.json();
+    const sets = [];
+    const params = [];
+    for (const f of INFO_FIELDS) {
+      if (d[f] !== undefined) { sets.push(f + ' = ?'); params.push(d[f]); }
+    }
+    for (const f of NUM_FIELDS) {
+      if (d[f] !== undefined) { sets.push(f + ' = ?'); params.push(Number(d[f]) || 0); }
+    }
+    for (const f of JSON_FIELDS) {
+      if (d[f] !== undefined) { sets.push(f + ' = ?'); params.push(JSON.stringify(d[f])); }
+    }
+    if (d.class_id !== undefined) {
+      const { cls, error: ce } = await assertOwnClass(ctx, d.class_id);
+      if (ce) return ce;
+      sets.push('class_id = ?'); params.push(cls.id);
+      sets.push('bj = ?'); params.push(cls.name);
+      sets.push('fdy = ?'); params.push(cls.teacher_account);
+    }
+    if (sets.length === 0) return fail('无更新字段', 400, env);
+
+    params.push(sm[1]);
+    await db.update('UPDATE students SET ' + sets.join(', ') + ' WHERE xh = ?', params);
+    if (d.xm && d.xm !== stu.xm) await db.update('UPDATE users SET name = ? WHERE account = ?', [d.xm, sm[1]]);
+    return ok(null, env);
+  }
+
+  if (sm && method === 'DELETE') {
+    const denied = requirePerm(ctx, 'student:write'); if (denied) return denied;
+    const { stu, error } = await assertOwnStudent(ctx, sm[1]);
+    if (error) return error;
+
+    await db.run('DELETE FROM attendance WHERE student_id = ?', [stu.id]);
+    await db.run('DELETE FROM proofs WHERE application_id IN (SELECT id FROM applications WHERE student_id = ?)', [stu.id]);
+    await db.run('DELETE FROM application_items WHERE application_id IN (SELECT id FROM applications WHERE student_id = ?)', [stu.id]);
+    await db.run('DELETE FROM applications WHERE student_id = ?', [stu.id]);
+    await db.run('DELETE FROM students WHERE id = ?', [stu.id]);
+    await db.run('DELETE FROM users WHERE account = ? AND role = ?', [sm[1], 'student']);
+    return ok(null, env);
+  }
+
+  // ===================== 考勤 =====================
+  if (path === ATTENDANCE_PATH && method === 'GET') {
+    const denied = requirePerm(ctx, 'attendance:read'); if (denied) return denied;
+    const { date, from, to, class_id, xh } = Object.fromEntries(searchParams);
+    let sql = `SELECT a.id, a.student_id, a.date, a.status, a.remark, a.created_by,
+                      s.xh, s.xm, s.bj
+               FROM attendance a JOIN students s ON a.student_id = s.id WHERE 1=1`;
+    const params = [];
+    const scope = ownerScope(ctx, 's');
+    sql += scope.sql; params.push(...scope.params);
+    if (date) { sql += ' AND a.date = ?'; params.push(date); }
+    if (from) { sql += ' AND a.date >= ?'; params.push(from); }
+    if (to) { sql += ' AND a.date <= ?'; params.push(to); }
+    if (class_id) { sql += ' AND s.class_id = ?'; params.push(class_id); }
+    if (xh) { sql += ' AND s.xh = ?'; params.push(xh); }
+    sql += ' ORDER BY a.date DESC, s.xh';
+    return ok(await db.query(sql, params), env);
+  }
+
+  if (path === ATTENDANCE_PATH && method === 'POST') {
+    const denied = requirePerm(ctx, 'attendance:write'); if (denied) return denied;
+    const d = await request.json();
+    if (!d.date || !Array.isArray(d.records)) return fail('缺少日期或考勤明细', 400, env);
+
+    const createdAt = now();
+    let affected = 0;
+    for (const rec of d.records) {
+      if (!rec.xh) continue;
+      const status = ATTENDANCE_STATUS.includes(rec.status) ? rec.status : 'present';
+      const stu = await db.queryOne('SELECT * FROM students WHERE xh = ?', [rec.xh]);
+      if (!stu) continue;
+      if (ctx.user.role !== 'admin' && stu.fdy !== ctx.user.account) continue;
+
+      await db.run(
+        `INSERT INTO attendance (student_id, date, status, remark, created_by, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(student_id, date) DO UPDATE SET
+           status = excluded.status, remark = excluded.remark,
+           created_by = excluded.created_by, created_at = excluded.created_at`,
+        [stu.id, d.date, status, rec.remark || '', ctx.user.account, createdAt]
+      );
+      affected++;
+    }
+    return ok({ affected }, env);
+  }
+
+  const am = path.match(ATTENDANCE_RE);
+  if (am && (method === 'PUT' || method === 'DELETE')) {
+    const denied = requirePerm(ctx, 'attendance:write'); if (denied) return denied;
+    const row = await db.queryOne(
+      'SELECT a.*, s.fdy FROM attendance a JOIN students s ON a.student_id = s.id WHERE a.id = ?',
+      [am[1]]
+    );
+    if (!row) return fail('考勤记录不存在', 404, env);
+    if (ctx.user.role !== 'admin' && row.fdy !== ctx.user.account) return fail('只能操作自己班级的考勤', 403, env);
+
+    if (method === 'DELETE') {
+      await db.run('DELETE FROM attendance WHERE id = ?', [am[1]]);
+      return ok(null, env);
+    }
+    const d = await request.json();
+    const status = ATTENDANCE_STATUS.includes(d.status) ? d.status : row.status;
+    await db.update('UPDATE attendance SET status = ?, remark = ? WHERE id = ?', [status, d.remark ?? row.remark, am[1]]);
+    return ok(null, env);
+  }
+
+  // ===================== 综测申请审核 =====================
+  if (path === APPS_PATH && method === 'GET') {
+    const denied = requirePerm(ctx, 'application:read'); if (denied) return denied;
+    const status = searchParams.get('status');
+    let sql = `SELECT a.*, s.xh, s.xm, s.bj, s.zhuanye
+               FROM applications a JOIN students s ON a.student_id = s.id WHERE 1=1`;
+    const params = [];
+    const scope = ownerScope(ctx, 's');
+    sql += scope.sql; params.push(...scope.params);
+    if (status) { sql += ' AND a.status = ?'; params.push(status); }
+    sql += ' ORDER BY a.created_at DESC';
+    return ok(await db.query(sql, params), env);
+  }
+
+  const appMatch = path.match(APP_RE);
+  if (appMatch && method === 'GET') {
+    const denied = requirePerm(ctx, 'application:read'); if (denied) return denied;
+    const app = await db.queryOne(
+      `SELECT a.*, s.xh, s.xm, s.bj, s.zhuanye, s.fdy FROM applications a
+       JOIN students s ON a.student_id = s.id WHERE a.id = ?`,
+      [appMatch[1]]
+    );
+    if (!app) return fail('申请不存在', 404, env);
+    if (ctx.user.role !== 'admin' && app.fdy !== ctx.user.account) return fail('只能查看本班学生的申请', 403, env);
+
+    const item = await db.queryOne('SELECT * FROM application_items WHERE application_id = ?', [app.id]);
+    const proofs = await db.query('SELECT * FROM proofs WHERE application_id = ?', [app.id]);
+
+    return ok({
+      ...app,
+      detail: item ? JSON.parse(item.detail) : null,
+      scores: item ? {
+        deyu_score: item.deyu_score, zhiyu_reward: item.zhiyu_reward, tiyu_reward: item.tiyu_reward,
+        meiyu_reward: item.meiyu_reward, laoyu_reward: item.laoyu_reward, koufen: item.koufen,
+      } : null,
+      proofs: proofs.map(p => ({
+        id: p.id, item_key: p.item_key, file_name: p.file_name,
+        file_type: p.file_type, size: p.size, file_path: p.file_path,
+      })),
+    }, env);
+  }
+
+  const rm = path.match(REVIEW_RE);
+  if (rm && method === 'PUT') {
+    const denied = requirePerm(ctx, 'application:review'); if (denied) return denied;
+    const appId = rm[1];
+    const { action, reject_reason } = await request.json();
+
+    const app = await db.queryOne(
+      'SELECT a.*, s.fdy FROM applications a JOIN students s ON a.student_id = s.id WHERE a.id = ?',
+      [appId]
+    );
+    if (!app) return fail('申请不存在', 404, env);
+    if (ctx.user.role !== 'admin' && app.fdy !== ctx.user.account) return fail('只能审核本班学生的申请', 403, env);
+    if (app.status !== 'pending') return fail('该申请已处理', 400, env);
+
+    const reviewedAt = now();
+    const reviewerId = ctx.user.id;
+
+    if (action === 'approve') {
+      await db.update(
+        'UPDATE applications SET status = ?, reviewed_at = ?, reviewer_id = ? WHERE id = ?',
+        ['approved', reviewedAt, reviewerId, appId]
+      );
+      await applyScores(db, app);
+      return ok(null, env);
+    }
+
+    if (action === 'reject') {
+      await db.update(
+        'UPDATE applications SET status = ?, reviewed_at = ?, reviewer_id = ?, reject_reason = ? WHERE id = ?',
+        ['rejected', reviewedAt, reviewerId, reject_reason || '未填写原因', appId]
+      );
+      return ok(null, env);
+    }
+
+    return fail('无效操作', 400, env);
+  }
+
+  return null;
+}
+
+/** 审核通过后把奖励分累加进学生成绩表 */
+async function applyScores(db, app) {
+  const item = await db.queryOne('SELECT * FROM application_items WHERE application_id = ?', [app.id]);
+  if (!item) return;
+
+  const stu = await db.queryOne('SELECT * FROM students WHERE id = ?', [app.student_id]);
+  if (!stu) return;
+
+  const sets = [];
+  const params = [];
+  for (const { item: key, column } of SCORE_FIELDS) {
+    const value = Number(item[key]) || 0;
+    if (value > 0) { sets.push(column + ' = ?'); params.push((Number(stu[column]) || 0) + value); }
+  }
+  if (item.koufen < 0) {
+    sets.push('koufen_chufen = ?');
+    params.push((Number(stu.koufen_chufen) || 0) + Math.abs(item.koufen));
+  }
+  if (sets.length === 0) return;
+
+  params.push(stu.id);
+  await db.update('UPDATE students SET ' + sets.join(', ') + ' WHERE id = ?', params);
+}
