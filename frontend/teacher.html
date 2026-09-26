@@ -426,6 +426,10 @@ async function apiPut(url,body){
   const resp=await fetch(API+url,{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},body:JSON.stringify(body)});
   return resp.json();
 }
+async function apiDelete(url){
+  const resp=await fetch(API+url,{method:'DELETE',headers:{'Authorization':'Bearer '+TOKEN}});
+  return resp.json();
+}
 
 function enterMain(){
   document.getElementById('mainPage').classList.remove('hidden');
@@ -591,17 +595,45 @@ function renderReview(data){
   document.getElementById('reviewOverlay').classList.add('open');
 }
 
+/* ---------- 数据模型转换：数据库扁平列 ↔ 编辑用的嵌套结构 ---------- */
+function toNum(v){const n=Number(v);return isNaN(n)?0:n;}
+function toArr(v){try{const p=typeof v==='string'?JSON.parse(v||'[]'):v;return Array.isArray(p)?p:[];}catch(e){return [];}}
+/** 数据库行（deyu_sixiang…）→ calc* / 编辑弹窗使用的嵌套结构 {deyu:{...},zhiyu:{...},…} */
+function toStudent(row){
+  return {...row,
+    id:row.id!=null?row.id:row.xh,
+    deyu:{sixiang:toNum(row.deyu_sixiang),biaozhang:toNum(row.deyu_biaozhang),ganbu:toArr(row.deyu_ganbu),rongyu:toArr(row.deyu_rongyu),custom:toNum(row.deyu_custom)},
+    zhiyu:{zhuanye:toNum(row.zhuanye_score),jingsai:toNum(row.zhiyu_jingsai),jineng:toArr(row.zhiyu_jineng),chuangye:toNum(row.zhiyu_chuangye),custom:toNum(row.zhiyu_custom)},
+    tiyu:{chengji:toNum(row.tiyu_chengji),tice:toNum(row.tiyu_tice),jiangli:toNum(row.tiyu_jiangli),custom:toNum(row.tiyu_custom)},
+    meiyu:{jiangli:toNum(row.meiyu_jiangli),custom:toNum(row.meiyu_custom)},
+    laoyu:{zhiyuanCishu:toNum(row.laoyu_zhiyuanCishu),xianxue:toNum(row.laoyu_xianxue),qinshi:toNum(row.laoyu_qinshi),shehui:toNum(row.laoyu_shehui),custom:toNum(row.laoyu_custom)},
+    koufen:{chufen:toNum(row.koufen_chufen),richang:toNum(row.koufen_richang)}
+  };
+}
+/** 嵌套结构 → 后端 PUT /api/teacher/students/:xh 需要的扁平字段 */
+function toPayload(s){
+  return {
+    zhuanye_score:s.zhiyu.zhuanye,
+    deyu_sixiang:s.deyu.sixiang,deyu_biaozhang:s.deyu.biaozhang,deyu_ganbu:s.deyu.ganbu,deyu_rongyu:s.deyu.rongyu,deyu_custom:s.deyu.custom,
+    zhiyu_jingsai:s.zhiyu.jingsai,zhiyu_jineng:s.zhiyu.jineng,zhiyu_chuangye:s.zhiyu.chuangye,zhiyu_custom:s.zhiyu.custom,
+    tiyu_chengji:s.tiyu.chengji,tiyu_tice:s.tiyu.tice,tiyu_jiangli:s.tiyu.jiangli,tiyu_custom:s.tiyu.custom,
+    meiyu_jiangli:s.meiyu.jiangli,meiyu_custom:s.meiyu.custom,
+    laoyu_zhiyuanCishu:s.laoyu.zhiyuanCishu,laoyu_xianxue:s.laoyu.xianxue,laoyu_qinshi:s.laoyu.qinshi,laoyu_shehui:s.laoyu.shehui,laoyu_custom:s.laoyu.custom,
+    koufen_chufen:s.koufen.chufen,koufen_richang:s.koufen.richang
+  };
+}
+
 async function loadStudents(){
   try{
     const result=await apiGet('/api/teacher/students');
-    if(result.code!==0)return;
-    studentsData=result.data.map(s=>{
+    if(result.code!==0){toast(result.msg||'加载学生失败','err');return;}
+    studentsData=(result.data||[]).map(toStudent).map(s=>{
       const de=calcDeyu(s),zhi=calcZhiyu(s),ti=calcTiyu(s),mei=calcMeiyu(s),lao=calcLaoyu(s),ko=calcKoufen(s);
-      return {...s, id:s.id||s.xh, deyuScore:de, zhiyuScore:zhi, tiyuScore:ti, meiyuScore:mei, laoyuScore:lao, koufenScore:ko, zongceScore:de*0.20+zhi*0.50+ti*0.10+mei*0.10+lao*0.10+ko};
+      return {...s, deyuScore:de, zhiyuScore:zhi, tiyuScore:ti, meiyuScore:mei, laoyuScore:lao, koufenScore:ko, zongceScore:de*0.20+zhi*0.50+ti*0.10+mei*0.10+lao*0.10+ko};
     }).sort((a,b)=>b.zongceScore-a.zongceScore);
     studentsData.forEach((s,i)=>s.rank=i+1);
     renderScoreTable();
-  }catch(e){}
+  }catch(e){toast('学生数据加载失败：'+((e&&e.message)||e),'err');}
 }
 
 function renderScoreTable(){
@@ -728,7 +760,7 @@ function updateEditTotbar(s){
 
 document.getElementById('editSave').addEventListener('click',()=>{
   const s=studentsData.find(x=>x.id===editId);if(!s)return;
-  apiPut('/api/teacher/students/'+s.xh,s).then(r=>{
+  apiPut('/api/teacher/students/'+encodeURIComponent(s.xh),toPayload(s)).then(r=>{
     if(r.code===0){toast('已保存','ok');document.getElementById('editOverlay').classList.remove('open');loadStudents();}
     else{toast(r.msg,'err');}
   }).catch(()=>{toast('保存失败','err');document.getElementById('editOverlay').classList.remove('open');});
@@ -761,13 +793,29 @@ async function loadMyClasses(){
   sel.innerHTML='<option value="">全部班级</option>'+myClasses.map(c=>`<option value="${c.id}">${esc(c.name)}（${c.student_count}人）</option>`).join('');
   if(cur)sel.value=cur;
 
-  let html='<thead><tr><th>班级</th><th>专业</th><th>年级</th><th>学生数</th><th>辅导员</th></tr></thead><tbody>';
-  if(!myClasses.length)html+='<tr><td colspan="5" style="padding:18px;text-align:center;color:var(--ink-3)">暂无班级，请先导入学生</td></tr>';
+  let html='<thead><tr><th>班级</th><th>专业</th><th>年级</th><th>学生数</th><th>辅导员</th><th>操作</th></tr></thead><tbody>';
+  if(!myClasses.length)html+='<tr><td colspan="6" style="padding:18px;text-align:center;color:var(--ink-3)">暂无班级，请先导入学生</td></tr>';
   myClasses.forEach(c=>{
-    html+=`<tr><td>${esc(c.name)}</td><td>${esc(c.major||'')}</td><td>${esc(c.grade||'')}</td><td>${esc(c.student_count)}</td><td>${esc(c.teacher_account)}</td></tr>`;
+    html+=`<tr><td>${esc(c.name)}</td><td>${esc(c.major||'')}</td><td>${esc(c.grade||'')}</td><td>${esc(c.student_count)}</td><td>${esc(c.teacher_account)}</td>`
+      +`<td><button class="btn danger" style="padding:4px 10px;font-size:12px" data-cid="${c.id}" data-cname="${esc(c.name)}" data-cnt="${Number(c.student_count)||0}">一键删除本班及学生</button></td></tr>`;
   });
   document.getElementById('classTable').innerHTML=html+'</tbody>';
 }
+
+// 一键删除班级及其全部学生（级联删除，不可恢复）
+document.getElementById('classTable').addEventListener('click',async e=>{
+  const btn=e.target.closest('[data-cid]');
+  if(!btn)return;
+  const cid=btn.dataset.cid,cname=btn.dataset.cname,cnt=Number(btn.dataset.cnt)||0;
+  const tip='确认删除班级「'+cname+'」'+(cnt?'及其 '+cnt+' 名学生':'')+'？\n学生的登录账号、考勤与申请记录将一并删除，且不可恢复。';
+  if(!confirm(tip))return;
+  btn.disabled=true;
+  try{
+    const r=await apiDelete('/api/teacher/classes/'+encodeURIComponent(cid)+'?cascade=1');
+    if(r.code===0){toast('已删除班级「'+cname+'」'+(cnt?'及 '+cnt+' 名学生':''),'ok');loadMyClasses();loadStudents();}
+    else{toast(r.msg||'删除失败','err');btn.disabled=false;}
+  }catch(err){toast('删除失败：'+((err&&err.message)||err),'err');btn.disabled=false;}
+});
 
 document.getElementById('btnImport').addEventListener('click',async()=>{
   const teacher=document.getElementById('impTeacher').value.trim()||USER.account;

@@ -129,10 +129,17 @@ export async function handleTeacher(path, method, ctx) {
       return ok(null, env);
     }
 
-    const used = await db.queryOne('SELECT COUNT(*) AS c FROM students WHERE class_id = ?', [cls.id]);
-    if (used && used.c > 0) return fail('该班级下还有学生，请先移除或转班', 400, env);
+    // 是否连同班级学生一并删除（教师端「一键删除本班及学生」传 cascade=1）
+    const cascade = ['1', 'true', 'yes'].includes(String(searchParams.get('cascade') || '').toLowerCase());
+    const roster = await db.query('SELECT id FROM students WHERE class_id = ?', [cls.id]);
+    if (roster.length > 0 && !cascade) {
+      return fail('该班级下还有学生，请先移除或转班；如需一并删除请使用「一键删除本班及学生」', 400, env);
+    }
+
+    // 级联删除：先逐个清空学生及其关联数据（账号 / 考勤 / 申请 / 证明材料），再删班级
+    for (const stu of roster) await purgeStudent(db, stu.id);
     await db.run('DELETE FROM classes WHERE id = ?', [cls.id]);
-    return ok(null, env);
+    return ok({ deleted_students: roster.length }, env);
   }
 
   // ===================== 学生导入 =====================
@@ -307,12 +314,7 @@ export async function handleTeacher(path, method, ctx) {
     const { stu, error } = await assertOwnStudent(ctx, sm[1]);
     if (error) return error;
 
-    await db.run('DELETE FROM attendance WHERE student_id = ?', [stu.id]);
-    await db.run('DELETE FROM proofs WHERE application_id IN (SELECT id FROM applications WHERE student_id = ?)', [stu.id]);
-    await db.run('DELETE FROM application_items WHERE application_id IN (SELECT id FROM applications WHERE student_id = ?)', [stu.id]);
-    await db.run('DELETE FROM applications WHERE student_id = ?', [stu.id]);
-    await db.run('DELETE FROM students WHERE id = ?', [stu.id]);
-    await db.run('DELETE FROM users WHERE account = ? AND role = ?', [sm[1], 'student']);
+    await purgeStudent(db, stu.id);
     return ok(null, env);
   }
 
@@ -462,6 +464,20 @@ export async function handleTeacher(path, method, ctx) {
   }
 
   return null;
+}
+
+/**
+ * 彻底删除一名学生：考勤 / 证明材料 / 申请明细 / 申请 / 学生档案 / 登录账号。
+ * 删除单个学生与「一键删除本班及学生」共用此逻辑，避免遗漏关联表。
+ */
+async function purgeStudent(db, studentId) {
+  const stu = await db.queryOne('SELECT xh FROM students WHERE id = ?', [studentId]);
+  await db.run('DELETE FROM attendance WHERE student_id = ?', [studentId]);
+  await db.run('DELETE FROM proofs WHERE application_id IN (SELECT id FROM applications WHERE student_id = ?)', [studentId]);
+  await db.run('DELETE FROM application_items WHERE application_id IN (SELECT id FROM applications WHERE student_id = ?)', [studentId]);
+  await db.run('DELETE FROM applications WHERE student_id = ?', [studentId]);
+  await db.run('DELETE FROM students WHERE id = ?', [studentId]);
+  if (stu && stu.xh) await db.run('DELETE FROM users WHERE account = ? AND role = ?', [stu.xh, 'student']);
 }
 
 /** 审核通过后把奖励分累加进学生成绩表 */
