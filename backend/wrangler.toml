@@ -12,7 +12,7 @@ ALLOWED_ORIGIN = "*"
 [[d1_databases]]
 binding = "DB"
 database_name = "zongce-db"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "a425ec30-a4de-4175-951d-958221986d3c"
 
 # R2 存储桶：存放学生上传的证明材料
 [[r2_buckets]]
