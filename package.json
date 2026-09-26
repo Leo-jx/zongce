@@ -2,7 +2,7 @@
   "name": "zongce-system",
   "version": "2.0.0",
   "private": true,
-  "description": "综测加分申报与审核系统（前端 Cloudflare Pages + 后端 Cloudflare Worker + D1 + R2）",
+  "description": "综测加分申报与审核系统（前端 Cloudflare Pages + 后端 Cloudflare Worker + D1 + KV）",
   "scripts": {
     "dev": "wrangler dev --config backend/wrangler.toml",
     "dev:pages": "wrangler pages dev frontend",
@@ -15,7 +15,7 @@
     "d1:schema:local": "wrangler d1 execute zongce-db --config backend/wrangler.toml --file backend/schema.sql --local",
     "d1:seed:local": "wrangler d1 execute zongce-db --config backend/wrangler.toml --file backend/seed.sql --local",
     "d1:migrate:local": "wrangler d1 execute zongce-db --config backend/wrangler.toml --file backend/migrations/0002_class_management.sql --local",
-    "r2:create": "wrangler r2 bucket create zongce-proofs",
+    "kv:create": "wrangler kv:namespace create zongce-files",
     "secret:jwt": "wrangler secret put JWT_SECRET --config backend/wrangler.toml"
   },
   "dependencies": {

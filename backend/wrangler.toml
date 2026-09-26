@@ -14,7 +14,7 @@ binding = "DB"
 database_name = "zongce-db"
 database_id = "a425ec30-a4de-4175-951d-958221986d3c"
 
-# R2 存储桶：存放学生上传的证明材料
-[[r2_buckets]]
-binding = "R2"
-bucket_name = "zongce-proofs"
+# KV 命名空间：存放学生上传的证明材料（base64）
+[[kv_namespaces]]
+binding = "FILES"
+id = "0c8623629f06415485c9b4db263e6e9c"

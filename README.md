@@ -3,7 +3,7 @@
 学生在线填报德 / 智 / 体 / 美 / 劳加分明细并上传证明材料，辅导员在线审核（通过 / 驳回），通过后奖励分自动累加进学生成绩表。
 
 - **前端**：纯静态页面，部署到 **Cloudflare Pages**
-- **后端**：Cloudflare **Worker**（ESM），数据存 **D1**，证明材料存 **R2**
+- **后端**：Cloudflare **Worker**（ESM），数据存 **D1**，证明材料存 **KV**
 - 无 Node 服务进程、无 MySQL、无 Docker，全部运行在 Cloudflare 平台上
 
 ---
@@ -23,7 +23,7 @@
 │   └── config.js              #   后端地址配置（API_BASE）
 │
 ├── backend/                   # 后端 —— Cloudflare Worker
-│   ├── wrangler.toml          #   Worker 配置：D1 / R2 / 环境变量绑定
+│   ├── wrangler.toml          #   Worker 配置：D1 / KV / 环境变量绑定
 │   ├── schema.sql             #   D1 建表脚本（全新安装）
 │   ├── seed.sql               #   D1 种子数据（管理员 / 教师 / 学生 / 班级 / 权限）
 │   ├── migrations/            #   已上线库的增量迁移脚本
@@ -71,7 +71,7 @@
 | GET / PUT | `/api/admin/permissions` | 管理员 | 查看 / 修改各角色权限 |
 | GET / POST | `/api/admin/accounts` | 管理员 | 账号列表 / 新建账号（可分配权限） |
 | PUT / DELETE | `/api/admin/accounts/:id` | 管理员 | 改角色 / 状态 / 密码 / 权限，删除账号 |
-| POST | `/api/upload` | 登录用户 | 上传证明材料到 R2 |
+| POST | `/api/upload` | 登录用户 | 上传证明材料到 KV（单文件 ≤10MB） |
 | GET | `/api/files/:key` | 公开只读 | 下载证明材料 |
 
 ---
@@ -115,14 +115,18 @@ npm install
 npx wrangler login          # 首次使用需授权 Cloudflare 账号
 ```
 
-### 3.1 创建 D1 数据库与 R2 存储桶
+### 3.1 创建 D1 数据库与 KV 命名空间
 
 ```bash
 npm run d1:create           # wrangler d1 create zongce-db
-npm run r2:create           # wrangler r2 bucket create zongce-proofs
+npm run kv:create           # wrangler kv:namespace create zongce-files
 ```
 
-`d1:create` 会输出 `database_id`，把它填到 `backend/wrangler.toml` 的 `[[d1_databases]].database_id`。
+`d1:create` 会输出 `database_id`，把它填到 `backend/wrangler.toml` 的 `[[d1_databases]].database_id`；
+`kv:create` 会输出 `id`，把它填到 `[[kv_namespaces]].id`。
+
+> 证明材料存放在 Workers KV（免费额度、无需额外开通），不使用 R2。
+> 注意 KV 免费额度为 **1000 次写入 / 天**、单值上限 **25 MB**（后端额外限制单文件 10 MB）。
 
 ### 3.2 初始化数据库
 
@@ -242,7 +246,7 @@ localStorage.setItem('zongce_api_base', 'http://localhost:8787');
 | `JWT_SECRET` | Worker Secret / `.dev.vars` | JWT 签名密钥 |
 | `ALLOWED_ORIGIN` | `wrangler.toml` `[vars]` | CORS 允许的来源，`*` 为不限制 |
 | `DB` | `[[d1_databases]]` | D1 数据库绑定 |
-| `R2` | `[[r2_buckets]]` | 证明材料存储桶绑定 |
+| `FILES` | `[[kv_namespaces]]` | 证明材料存储（KV，值为 base64） |
 
 ---
 
