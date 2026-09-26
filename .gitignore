@@ -1,6 +1,7 @@
 node_modules/
 .wrangler/
 .wrangler-dryrun/
+.pages-dist/
 .dev.vars
 .env
 .env.*

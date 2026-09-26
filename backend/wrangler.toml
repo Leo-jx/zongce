@@ -6,7 +6,7 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 # 前端 Cloudflare Pages 的域名，用于 CORS 白名单；留 "*" 表示允许任意来源
-ALLOWED_ORIGIN = "*"
+ALLOWED_ORIGIN = "https://zongce-system.pages.dev"
 
 # D1 数据库：部署前把 database_id 换成 `wrangler d1 create zongce-db` 返回的真实 ID
 [[d1_databases]]

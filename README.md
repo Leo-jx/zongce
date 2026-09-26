@@ -4,6 +4,7 @@
 
 - **前端**：纯静态页面，部署到 **Cloudflare Pages**
 - **后端**：Cloudflare **Worker**（ESM），数据存 **D1**，证明材料存 **KV**
+- **部署形态**：前后端共用同一个 Pages 域名（`_worker.js` 高级模式），`/api/**` 由后端代码接管，其余走静态资源 —— 同源免跨域，且不依赖国内常访问不通的 `workers.dev`
 - 无 Node 服务进程、无 MySQL、无 Docker，全部运行在 Cloudflare 平台上
 
 ---
@@ -148,44 +149,50 @@ npm run secret:jwt          # wrangler secret put JWT_SECRET
 
 > 生产环境务必设置高强度 `JWT_SECRET`；未设置时会回退到内置默认密钥，存在安全风险。
 
-### 3.4 部署后端 Worker
+### 3.4 部署（推荐：前后端同一个 Pages 项目）
+
+`scripts/build-pages.mjs` 会把两端组装进 `.pages-dist`：静态页面放根目录，后端模块放 `_api/`，
+根目录的 `_worker.js` 负责分发（`/api/**` 走后端，其余走静态资源）。
+
+```bash
+npm run deploy:pages        # 先 build:pages 再 wrangler pages deploy .pages-dist --branch main
+```
+
+**为什么要这样部署**：国内网络访问 `*.workers.dev` 经常超时，而 `*.pages.dev` 通常正常。
+共用同一个 Pages 域名还能免去跨域配置——`frontend/config.js` 的 `REMOTE_API_BASE` 保持为空即可。
+
+**首次部署需为 Pages 项目配置绑定**（CLI 无法设置，控制台或 API 二选一）：
+
+控制台：Pages 项目 → Settings → Functions
+| 类型 | 变量名 | 值 |
+| --- | --- | --- |
+| D1 database bindings | `DB` | `zongce-db` |
+| KV namespace bindings | `FILES` | `zongce-files` |
+| Environment variable（Secret） | `JWT_SECRET` | 高强度随机串 |
+| Environment variable | `ALLOWED_ORIGIN` | `https://<pages-domain>` |
+
+配置完**重新执行一次 `npm run deploy:pages`** 才会生效。
+
+### 3.5 备选：后端单独部署为 Worker
 
 ```bash
 npm run deploy              # wrangler deploy --config backend/wrangler.toml
 ```
 
-部署完成后得到后端地址，例如 `https://zongce-api.<your-subdomain>.workers.dev`。
+绑定由 `backend/wrangler.toml` 声明，无需在控制台再配。若采用这种方式，
+需把 `frontend/config.js` 的 `REMOTE_API_BASE` 填成 Worker 域名，并把 `ALLOWED_ORIGIN` 填成 Pages 域名。
 
-### 3.5 部署前端 Pages
+> 注意：此方式下前端访问后端依赖 `workers.dev`，国内可能不通。
 
-**方式 A：命令行部署**
+### 3.6 Pages Git 连接（可选）
 
-```bash
-npm run deploy:pages        # wrangler pages deploy frontend --project-name zongce-system
-```
-
-**方式 B：Git 连接（推荐，推送即部署）**
-
-1. Cloudflare Dashboard → Workers & Pages → Create → Pages → Connect to Git
-2. 选择本仓库，构建配置填写：
+Workers & Pages → Create → Pages → Connect to Git → 选本仓库：
 
 | 配置项 | 值 |
 | --- | --- |
 | Framework preset | None |
-| Build command | 留空 |
-| Build output directory | `frontend` |
-
-### 3.6 打通前后端
-
-前端与后端不同源，需要把后端地址告诉前端。编辑 `frontend/config.js`：
-
-```js
-var REMOTE_API_BASE = 'https://zongce-api.<your-subdomain>.workers.dev';
-```
-
-重新部署 Pages 即可（Git 连接时推送一次提交）。
-
-同时建议把 `backend/wrangler.toml` 的 `ALLOWED_ORIGIN` 改为 Pages 域名（如 `https://zongce-system.pages.dev`），收紧 CORS 白名单，然后 `npm run deploy` 使配置生效。
+| Build command | `npm run build:pages` |
+| Build output directory | `.pages-dist` |
 
 ### 3.7 访问地址
 

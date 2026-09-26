@@ -21,9 +21,10 @@ export default {
     const url = new URL(request.url);
     const { pathname: path, searchParams } = url;
     const method = request.method;
-    const ctx = { request, env, url, searchParams, db: createDb(env.DB) };
+    const ctx = { request, env, url, searchParams, db: null };
 
     try {
+      ctx.db = createDb(env.DB);
       // 1) 公开接口：登录、证明材料下载
       if (path.startsWith('/api/files/')) {
         const res = await handleFileDownload(path, method, ctx);
