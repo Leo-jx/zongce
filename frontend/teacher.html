@@ -180,6 +180,21 @@ table.grid tbody tr:hover{background:#f7fafd}
 .imp-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:10px}
 .imp-tip{font-size:12px;color:var(--ink-3)}
 .imp-result{margin-top:10px;background:#f7fafd;border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:12.5px;color:var(--ink-2)}
+/* 成绩导入：拖拽区 / 解析预览 / 教学计划库 */
+.dropzone{border:1.5px dashed var(--line-strong);border-radius:10px;padding:18px 14px;text-align:center;background:#fafcfe;cursor:pointer;transition:.15s;margin-top:2px}
+.dropzone:hover,.dropzone.over{border-color:var(--primary);background:var(--primary-bg)}
+.dz-big{font-size:13.5px;color:var(--primary);font-weight:600}
+.dz-small{font-size:11.5px;color:var(--ink-3);margin-top:4px;line-height:1.5}
+.import-preview{margin-top:10px;font-size:12.5px;color:var(--ink-2);line-height:1.7}
+.import-preview .good{color:var(--good);font-weight:600}
+.import-preview .bad{color:var(--bad);font-weight:600}
+.previewlist{margin-top:8px;max-height:250px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+.previewlist table{width:100%;border-collapse:collapse;font-size:12px}
+.previewlist th,.previewlist td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+.previewlist th{background:#f4f8fc;color:var(--ink-2);font-weight:600;position:sticky;top:0}
+.plansum-title{font-size:12.5px;color:var(--ink-2);margin:10px 0 6px}
+.linkbtn{background:none;border:0;color:var(--primary);font-size:12px;cursor:pointer;padding:0;text-decoration:underline}
+.fmtcode{margin-top:10px;padding:10px 12px;background:#f7fafd;border:1px solid var(--line);border-radius:8px;font-size:11.5px;line-height:1.9;color:var(--ink-2);white-space:pre-wrap;font-family:Consolas,Menlo,monospace}
 </style>
 </head>
 <body>
@@ -315,6 +330,39 @@ table.grid tbody tr:hover{background:#f7fafd}
     </div>
 
     <div class="card">
+      <h2>学业成绩导入（教务成绩单 · 加权平均分）</h2>
+      <div class="imp-row">
+        <label class="imp-lab" style="display:flex;align-items:center;gap:6px">
+          <input type="checkbox" id="scoreUpdate" checked> 学号已存在时更新其专业成绩
+        </label>
+        <span class="imp-lab">目标班级（新生必填，仅更新已有学生可留空）</span>
+        <input id="scoreClass" class="imp-input" placeholder="如 护理2301">
+      </div>
+      <div class="imp-row">
+        <span class="imp-lab">匹配教学计划</span>
+        <select id="planSelect" class="imp-input" style="min-width:250px"><option value="">不匹配（全部课程按必修加权）</option></select>
+        <button class="btn" id="btnPlanLib">教学计划库</button>
+        <span class="hint" id="planMatchHint"></span>
+      </div>
+      <div class="dropzone" id="scoreZone">
+        <div class="dz-big">点击选择或拖入 教务成绩单 / 课程明细表（.xlsx / .xls / .csv）</div>
+        <div class="dz-small">自动识别三种格式并计算专业成绩：加权平均 × 0.8（必修 ×0.7 + 限选 ×0.3）</div>
+      </div>
+      <input type="file" id="scoreFile" accept=".xlsx,.xls,.csv" style="display:none">
+      <div class="import-preview" id="scorePreview"></div>
+      <div class="imp-foot">
+        <span class="imp-tip" id="scoreTip">专业成绩 =（必修加权平均 ×0.7 + 限选加权平均 ×0.3）×0.8；未匹配教学计划时全部课程按必修加权。</span>
+        <button class="btn primary" id="btnScoreImport" disabled>确认导入</button>
+      </div>
+      <div class="fmtcode">格式一（教务成绩单，宽表，课程列自动识别并按学分加权）：
+排名  学号  姓名  班级  Web 应用程序开发 (学分:3)  JavaScript 网页交互式设计 (学分:4)  Python程序设计 (学分:2)  加权平均分
+格式二（课程明细，可区分必修/限选权重）：
+学号  姓名  课程名称  学分  课程性质  成绩
+格式三（直接给专业成绩分，80 分制）：
+学号  姓名  专业成绩</div>
+    </div>
+
+    <div class="card">
       <h2>我的班级</h2>
       <div class="tblwrap"><table class="grid" id="classTable"></table></div>
     </div>
@@ -366,8 +414,50 @@ table.grid tbody tr:hover{background:#f7fafd}
   </div>
 </div>
 
+<div class="overlay" id="planOverlay">
+  <div class="dialog">
+    <div class="head">
+      <h2>教学计划库</h2>
+      <button class="icon-x" id="planClose" aria-label="关闭">×</button>
+    </div>
+    <div class="body">
+      <div class="hint" style="margin-bottom:10px">导入教务处教学计划文件（.xlsx / .xls / .csv），自动识别「年级 / 专业 / 学年学期 / 课程名称 / 课程性质 / 总学分」。导入教务成绩单时按学生班级自动匹配计划：<b>必修×0.7 + 限选×0.3</b>。课程性质映射：公共必修课、公共基础课、学科基础课、专业基础课、专业核心课 → 必修；公共选修课、专业任选课、专业拓展课 → 限选。</div>
+      <div class="dropzone" id="planZone">
+        <div class="dz-big">点击选择或拖入教学计划文件（可多选）</div>
+        <div class="dz-small">需包含「课程名称」「课程性质」「总学分」列，可选「年级」「专业」「学年学期」</div>
+      </div>
+      <input type="file" id="planInput" accept=".xlsx,.xls,.csv" multiple style="display:none">
+      <div class="import-preview" id="planPreview"></div>
+      <div class="plansum" id="planList"></div>
+    </div>
+    <div class="foot">
+      <span class="hint" id="planFootHint" style="margin-right:auto"></span>
+      <button class="btn" id="planClear">清空教学计划</button>
+      <button class="btn primary" id="planDone">完成</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
+<!-- Excel 解析组件：双源加载（用于导入教务成绩单 / 教学计划） -->
+<script>
+(function(){
+  var libs=[
+    'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'
+  ];
+  function tryLoad(i){
+    if(i>=libs.length){window.__xlsxFailed=true;return;}
+    var s=document.createElement('script');
+    s.src=libs[i];
+    s.onload=function(){try{window.dispatchEvent(new Event('xlsxready'));}catch(e){}};
+    s.onerror=function(){tryLoad(i+1);};
+    document.head.appendChild(s);
+  }
+  tryLoad(0);
+})();
+</script>
 <script src="config.js"></script>
 <script src="auth.js"></script>
 <script>
@@ -381,7 +471,7 @@ const OPTS = {
   sixiang: [{v:0,t:'无'},{v:1,t:'入党积极分子 +1'},{v:2,t:'中共预备党员 +2'},{v:3,t:'中共党员 +3'}],
   biaozhang: [{v:0,t:'无'},{v:5,t:'校级表彰 +5'},{v:6,t:'市级表彰 +6'},{v:8,t:'省级表彰 +8'},{v:10,t:'国家级表彰 +10'}],
   ganbu: [{v:8,t:'校级学生组织主席团/团委副书记 +8'},{v:6,t:'校级学生组织部门正副职 +6'},{v:3,t:'校级学生组织部门干事 +3'},{v:6,t:'院级学生组织主席团/团总支副书记 +6'},{v:4,t:'院级学生组织部门正副职 +4'},{v:3,t:'班级班干部 +3'},{v:2,t:'寝室长/信息员 +2'}],
-  rongyu: [{v:10,t:'国家部委级荣誉 +10'},{v:6,t:'省级荣誉 +6'},{v:4,t:'市级荣誉 +4'},{v:2,t:'校级荣誉 +2'},{v:10,t:'征兵入伍/三支一扶/西部计划 +10'}],
+  rongyu: [{v:10,t:'国家部委级荣誉 +10'},{v:6,t:'省级荣誉 +6'},{v:4,t:'市级荣誉 +4'},{v:2,t:'校级荣誉 +2'},{v:10,t:'征兵入伍/三支一扶/西部计划 +10（计一次）'}],
   jingsai: [{v:0,t:'无'},{v:20,t:'Ⅰ类 特等奖 +20'},{v:18,t:'Ⅰ类 一等奖 +18'},{v:16,t:'Ⅰ类 二等奖 +16'},{v:14,t:'Ⅰ类 三等奖 +14'},{v:18,t:'Ⅱ类 特等奖 +18'},{v:15,t:'Ⅱ类 一等奖 +15'},{v:12,t:'Ⅱ类 二等奖 +12'},{v:10,t:'Ⅱ类 三等奖 +10'},{v:15,t:'Ⅲ类 特等奖 +15'},{v:12,t:'Ⅲ类 一等奖 +12'},{v:10,t:'Ⅲ类 二等奖 +10'},{v:8,t:'Ⅲ类 三等奖 +8'},{v:12,t:'Ⅳ类 特等奖 +12'},{v:10,t:'Ⅳ类 一等奖 +10'},{v:8,t:'Ⅳ类 二等奖 +8'},{v:6,t:'Ⅳ类 三等奖 +6'},{v:5,t:'校赛 特等奖 +5'},{v:3,t:'校赛 一等奖 +3'},{v:2,t:'校赛 二等奖 +2'},{v:1,t:'校赛 三等奖 +1'}],
   jineng: [{v:4,t:'大学英语四级 +4'},{v:8,t:'大学英语六级 +8'},{v:3,t:'计算机二级 +3'},{v:5,t:'计算机三级 +5'},{v:3,t:'普通话二甲 +3'},{v:5,t:'普通话一乙 +5'},{v:8,t:'普通话一甲 +8'},{v:3,t:'职业技能初级 +3'},{v:5,t:'职业技能中级 +5'},{v:8,t:'职业技能高级 +8'}],
   chuangye: [{v:0,t:'无'},{v:10,t:'自主创业（完成登记并实际运作）+10'}],
@@ -389,7 +479,7 @@ const OPTS = {
   tice: [{v:30,t:'体测合格 +30'},{v:30,t:'退役士兵免测 +30'},{v:20,t:'病/伤/残免测 +20'},{v:0,t:'未参加体测 +0'}],
   tiyuJiangli: [{v:0,t:'无'},{v:2,t:'校级奖项 +2'},{v:4,t:'市级奖项 +4'},{v:6,t:'省级奖项 +6'},{v:10,t:'国家级奖项 +10'}],
   meiyuJiangli: [{v:0,t:'无'},{v:20,t:'Ⅰ类 特等奖 +20'},{v:18,t:'Ⅰ类 一等奖 +18'},{v:16,t:'Ⅰ类 二等奖 +16'},{v:14,t:'Ⅰ类 三等奖 +14'},{v:18,t:'Ⅱ类 特等奖 +18'},{v:15,t:'Ⅱ类 一等奖 +15'},{v:12,t:'Ⅱ类 二等奖 +12'},{v:10,t:'Ⅱ类 三等奖 +10'},{v:15,t:'Ⅲ类 特等奖 +15'},{v:12,t:'Ⅲ类 一等奖 +12'},{v:10,t:'Ⅲ类 二等奖 +10'},{v:8,t:'Ⅲ类 三等奖 +8'},{v:12,t:'Ⅳ类 特等奖 +12'},{v:10,t:'Ⅳ类 一等奖 +10'},{v:8,t:'Ⅳ类 二等奖 +8'},{v:6,t:'Ⅳ类 三等奖 +6'},{v:5,t:'校赛 特等奖 +5'},{v:3,t:'校赛 一等奖 +3'},{v:2,t:'校赛 二等奖 +2'},{v:1,t:'校赛 三等奖 +1'}],
-  shehui: [{v:0,t:'无'},{v:10,t:'国家级表彰 +10'},{v:8,t:'省级表彰 +8'},{v:6,t:'市级表彰 +6'},{v:4,t:'校级表彰 +4'},{v:5,t:'国家级先进集体成员 +5'},{v:4,t:'省级先进集体成员 +4'},{v:3,t:'市级先进集体成员 +3'},{v:2,t:'校级先进集体成员 +2'},{v:2,t:'完成社会实践并提交报告 +2'}],
+  shehui: [{v:0,t:'无'},{v:10,t:'国家级表彰（负责人/先进个人/报告获奖）+10'},{v:8,t:'省级表彰（负责人/先进个人/报告获奖）+8'},{v:6,t:'市级表彰（负责人/先进个人/报告获奖）+6'},{v:4,t:'校级表彰（负责人/先进个人/报告获奖）+4'},{v:5,t:'国家级先进集体成员 +5'},{v:4,t:'省级先进集体成员 +4'},{v:3,t:'市级先进集体成员 +3'},{v:2,t:'校级先进集体成员 +2'},{v:2,t:'完成社会实践并提交报告（每份）+2'}],
   chufen: [{v:0,t:'无'},{v:30,t:'公安查处/违法违纪等 -30'},{v:20,t:'留校察看 -20'},{v:15,t:'记过 -15'},{v:10,t:'严重警告 -10'},{v:7,t:'警告 -7'},{v:5,t:'全校通报批评 -5'},{v:2,t:'学院通报批评 -2'}]
 };
 const CAP = 20;
@@ -686,51 +776,51 @@ function openEdit(sid){
   grid.innerHTML='';
 
   const wrap1=document.createElement('div');
-  const si=buildSelect(OPTS.sixiang,s.deyu.sixiang);si.dataset.k='deyu.sixiang';wrap1.appendChild(fieldRow('思想进步',si));
-  const bz=buildSelect(OPTS.biaozhang,s.deyu.biaozhang);bz.dataset.k='deyu.biaozhang';wrap1.appendChild(fieldRow('见义勇为等表彰',bz));
-  const gb=buildSelect(OPTS.ganbu,s.deyu.ganbu,true);gb.dataset.k='deyu.ganbu';wrap1.appendChild(fieldRow('团学干部任职',gb,'干部类封顶10'));
-  const ry=buildSelect(OPTS.rongyu,s.deyu.rongyu,true);ry.dataset.k='deyu.rongyu';wrap1.appendChild(fieldRow('荣誉加分',ry,'荣誉类封顶10'));
-  const cu1=numInput(s.deyu.custom);cu1.dataset.k='deyu.custom';wrap1.appendChild(fieldRow('其他德育加分',cu1));
+  const si=buildSelect(OPTS.sixiang,s.deyu.sixiang);si.dataset.k='deyu.sixiang';wrap1.appendChild(fieldRow('思想进步',si,'积极分子+1 / 预备党员+2 / 党员+3，取一项'));
+  const bz=buildSelect(OPTS.biaozhang,s.deyu.biaozhang);bz.dataset.k='deyu.biaozhang';wrap1.appendChild(fieldRow('见义勇为等表彰',bz,'校5 / 市6 / 省8 / 国10，取最高一级'));
+  const gb=buildSelect(OPTS.ganbu,s.deyu.ganbu,true);gb.dataset.k='deyu.ganbu';wrap1.appendChild(fieldRow('团学干部任职（可多选）',gb,'多选累计，干部类封顶 10 分'));
+  const ry=buildSelect(OPTS.rongyu,s.deyu.rongyu,true);ry.dataset.k='deyu.rongyu';wrap1.appendChild(fieldRow('荣誉加分（可多选）',ry,'同种奖励不同级别可累计，荣誉类封顶 10 分'));
+  const cu1=numInput(s.deyu.custom);cu1.dataset.k='deyu.custom';wrap1.appendChild(fieldRow('其他德育加分（自定义）',cu1,'不计入干部/荣誉上限，但总奖励封顶 20'));
   bindEditChange(wrap1);
-  grid.appendChild(modCard('mod-de','德育（基础 80 + 奖励）',wrap1));
+  grid.appendChild(modCard('mod-de','德育（基础 80 + 奖励，封顶 20）',wrap1));
 
   const wrap2=document.createElement('div');
-  const zy=numInput(s.zhiyu.zhuanye,0,80,0.1);zy.dataset.k='zhiyu.zhuanye';wrap2.appendChild(fieldRow('专业成绩（80分制）',zy));
-  const js=buildSelect(OPTS.jingsai,s.zhiyu.jingsai);js.dataset.k='zhiyu.jingsai';wrap2.appendChild(fieldRow('学科技能竞赛',js));
-  const jn=buildSelect(OPTS.jineng,s.zhiyu.jineng,true);jn.dataset.k='zhiyu.jineng';wrap2.appendChild(fieldRow('职业技能证书',jn,'证书类封顶20'));
-  const cy=buildSelect(OPTS.chuangye,s.zhiyu.chuangye);cy.dataset.k='zhiyu.chuangye';wrap2.appendChild(fieldRow('创新创业',cy));
-  const cu2=numInput(s.zhiyu.custom);cu2.dataset.k='zhiyu.custom';wrap2.appendChild(fieldRow('其他智育加分',cu2));
+  const zy=numInput(s.zhiyu.zhuanye,0,80,0.1);zy.dataset.k='zhiyu.zhuanye';wrap2.appendChild(fieldRow('专业成绩（80分制）',zy,'由教务系统导出课程成绩按公式加权×80%计算，可在此直接填结果'));
+  const js=buildSelect(OPTS.jingsai,s.zhiyu.jingsai);js.dataset.k='zhiyu.jingsai';wrap2.appendChild(fieldRow('学科技能竞赛',js,'Ⅰ-Ⅳ类及校赛，每类取最高一项'));
+  const jn=buildSelect(OPTS.jineng,s.zhiyu.jineng,true);jn.dataset.k='zhiyu.jineng';wrap2.appendChild(fieldRow('职业技能证书（可多选）',jn,'英语/计算机/普通话/职业技能证书，多选累计'));
+  const cy=buildSelect(OPTS.chuangye,s.zhiyu.chuangye);cy.dataset.k='zhiyu.chuangye';wrap2.appendChild(fieldRow('创新创业',cy,'自主创业（完成企业登记并实际运作）+10'));
+  const cu2=numInput(s.zhiyu.custom);cu2.dataset.k='zhiyu.custom';wrap2.appendChild(fieldRow('其他智育加分（自定义）',cu2,'总奖励封顶 20'));
   bindEditChange(wrap2);
-  grid.appendChild(modCard('mod-zhi','智育（专业成绩 + 奖励）',wrap2));
+  grid.appendChild(modCard('mod-zhi','智育（专业成绩 + 奖励，封顶 20）',wrap2));
 
   const wrap3=document.createElement('div');
-  const cj=buildSelect(OPTS.tiyuChengji,s.tiyu.chengji);cj.dataset.k='tiyu.chengji';wrap3.appendChild(fieldRow('期末体育成绩（50分）',cj));
-  const tc=buildSelect(OPTS.tice,s.tiyu.tice);tc.dataset.k='tiyu.tice';wrap3.appendChild(fieldRow('体质测试（30分）',tc));
-  const jl=buildSelect(OPTS.tiyuJiangli,s.tiyu.jiangli);jl.dataset.k='tiyu.jiangli';wrap3.appendChild(fieldRow('体育奖励',jl));
-  const cu3=numInput(s.tiyu.custom);cu3.dataset.k='tiyu.custom';wrap3.appendChild(fieldRow('其他体育加分',cu3));
+  const cj=buildSelect(OPTS.tiyuChengji,s.tiyu.chengji);cj.dataset.k='tiyu.chengji';wrap3.appendChild(fieldRow('期末体育成绩（50分）',cj,'及格得 50；无体育课参照上学年'));
+  const tc=buildSelect(OPTS.tice,s.tiyu.tice);tc.dataset.k='tiyu.tice';wrap3.appendChild(fieldRow('体质测试（30分）',tc,'合格 30 / 退役免测 30 / 病伤残免测 20 / 未测 0'));
+  const jl=buildSelect(OPTS.tiyuJiangli,s.tiyu.jiangli);jl.dataset.k='tiyu.jiangli';wrap3.appendChild(fieldRow('体育奖励',jl,'体育竞赛/心理活动/组织者，按荣誉档取最高一次'));
+  const cu3=numInput(s.tiyu.custom);cu3.dataset.k='tiyu.custom';wrap3.appendChild(fieldRow('其他体育加分（自定义）',cu3,'总奖励封顶 20'));
   bindEditChange(wrap3);
-  grid.appendChild(modCard('mod-ti','体育（成绩 50 + 体测 30 + 奖励）',wrap3));
+  grid.appendChild(modCard('mod-ti','体育（成绩 50 + 体测 30 + 奖励，封顶 20）',wrap3));
 
   const wrap4=document.createElement('div');
-  const mj=buildSelect(OPTS.meiyuJiangli,s.meiyu.jiangli);mj.dataset.k='meiyu.jiangli';wrap4.appendChild(fieldRow('文艺竞赛/演出获奖',mj));
-  const cu4=numInput(s.meiyu.custom);cu4.dataset.k='meiyu.custom';wrap4.appendChild(fieldRow('其他美育加分',cu4));
+  const mj=buildSelect(OPTS.meiyuJiangli,s.meiyu.jiangli);mj.dataset.k='meiyu.jiangli';wrap4.appendChild(fieldRow('文艺竞赛/大型演出获奖',mj,'按竞赛档取最高一次，同一项目不累加'));
+  const cu4=numInput(s.meiyu.custom);cu4.dataset.k='meiyu.custom';wrap4.appendChild(fieldRow('其他美育加分（自定义）',cu4,'总奖励封顶 20'));
   bindEditChange(wrap4);
-  grid.appendChild(modCard('mod-mei','美育（基础 80 + 奖励）',wrap4));
+  grid.appendChild(modCard('mod-mei','美育（基础 80 + 奖励，封顶 20）',wrap4));
 
   const wrap5=document.createElement('div');
-  const zy2=numInput(s.laoyu.zhiyuanCishu,0,99,1);zy2.dataset.k='laoyu.zhiyuanCishu';wrap5.appendChild(fieldRow('志愿公益次数',zy2,'1次=1分，封顶10'));
-  const xx=numInput(s.laoyu.xianxue,0,99,1);xx.dataset.k='laoyu.xianxue';wrap5.appendChild(fieldRow('义务献血次数',xx,'每次+5分'));
-  const qs=numInput(s.laoyu.qinshi,0,20,1);qs.dataset.k='laoyu.qinshi';wrap5.appendChild(fieldRow('最美寝室加分',qs));
-  const sh=buildSelect(OPTS.shehui,s.laoyu.shehui);sh.dataset.k='laoyu.shehui';wrap5.appendChild(fieldRow('社会实践',sh));
-  const cu5=numInput(s.laoyu.custom);cu5.dataset.k='laoyu.custom';wrap5.appendChild(fieldRow('其他劳育加分',cu5));
+  const zy2=numInput(s.laoyu.zhiyuanCishu,0,99,1);zy2.dataset.k='laoyu.zhiyuanCishu';wrap5.appendChild(fieldRow('志愿公益次数',zy2,'1 次=1 分…10 次及以上=10 分'));
+  const xx=numInput(s.laoyu.xianxue,0,99,1);xx.dataset.k='laoyu.xianxue';wrap5.appendChild(fieldRow('义务献血次数',xx,'每次 +5 分'));
+  const qs=numInput(s.laoyu.qinshi,0,20,1);qs.dataset.k='laoyu.qinshi';wrap5.appendChild(fieldRow('最美寝室加分',qs,'成员 +5/次，寝室长另 +2/次，直接填合计'));
+  const sh=buildSelect(OPTS.shehui,s.laoyu.shehui);sh.dataset.k='laoyu.shehui';wrap5.appendChild(fieldRow('社会实践',sh,'同一事迹以最高级别表彰计，不重复'));
+  const cu5=numInput(s.laoyu.custom);cu5.dataset.k='laoyu.custom';wrap5.appendChild(fieldRow('其他劳育加分（自定义）',cu5,'总奖励封顶 20'));
   bindEditChange(wrap5);
-  grid.appendChild(modCard('mod-lao','劳育（基础 80 + 奖励）',wrap5));
+  grid.appendChild(modCard('mod-lao','劳育（基础 80 + 奖励，封顶 20）',wrap5));
 
   const wrap6=document.createElement('div');
-  const cf=buildSelect(OPTS.chufen,s.koufen.chufen);cf.dataset.k='koufen.chufen';wrap6.appendChild(fieldRow('纪律处分',cf));
-  const rc=numInput(s.koufen.richang,0,999,1);rc.dataset.k='koufen.richang';wrap6.appendChild(fieldRow('日常扣分合计',rc));
+  const cf=buildSelect(OPTS.chufen,s.koufen.chufen);cf.dataset.k='koufen.chufen';wrap6.appendChild(fieldRow('纪律处分',cf,'留校察看 20 / 记过 15 / 警告 7 / 通报 5·2 / 公安查处 30'));
+  const rc=numInput(s.koufen.richang,0,999,1);rc.dataset.k='koufen.richang';wrap6.appendChild(fieldRow('日常扣分合计',rc,'迟到早退1·缺勤3·晚归1·大功率5·抽烟酗酒6·损坏公物5·活动缺勤3·诚信3-8 等，汇总填写'));
   bindEditChange(wrap6);
-  grid.appendChild(modCard('mod-ko','扣分项',wrap6));
+  grid.appendChild(modCard('mod-ko','扣分项（负分，从总分扣除）',wrap6));
 
   updateEditTotbar(s);
   document.getElementById('editOverlay').classList.add('open');
@@ -956,6 +1046,353 @@ document.getElementById('btnSaveAtt').addEventListener('click',async()=>{
   if(!attRoster.length){toast('请先载入名单','err');return;}
   const r=await apiPost('/api/teacher/attendance',{date,records:attRoster.map(s=>({xh:s.xh,status:s.status,remark:s.remark}))});
   toast(r.code===0?'考勤已保存':'保存失败：'+r.msg,r.code===0?'ok':'err');
+});
+
+/* ================= 教学计划库（用于教务成绩单的必修/限选匹配） ================= */
+const LS_PLAN_KEY='zongce_plans_v1';
+let PLANS=[];
+let pendingScores=null;
+const PLAN_PROP={
+  '公共必修课':'必修','公共基础课':'必修','学科基础课':'必修','专业基础课':'必修','专业核心课':'必修',
+  '公共选修课':'限选','专业任选课':'限选','专业拓展课':'限选'
+};
+
+function loadPlans(){try{PLANS=JSON.parse(localStorage.getItem(LS_PLAN_KEY)||'[]')||[];}catch(e){PLANS=[];}}
+function savePlans(){try{localStorage.setItem(LS_PLAN_KEY,JSON.stringify(PLANS));}catch(e){}}
+function planLabel(p){return (p.grade||'')+'级 '+(p.major||'')+(p.term?'（'+p.term+'）':'');}
+function propType(prop){const s=String(prop||'');if(PLAN_PROP[s])return PLAN_PROP[s];if(/选修|任选|拓展/.test(s))return '限选';return '必修';}
+function normName(s){return String(s||'').toLowerCase().replace(/\s+/g,'').replace(/[（(]/g,'(').replace(/[）)]/g,')').replace(/[\u3000]/g,'');}
+function normH(h){return String(h).replace(/\s+/g,'').toLowerCase().replace(/[（(].*?[)）]/g,'');}
+function matchCourse(name,plan){
+  const n=normName(name);
+  if(!n||!plan||!plan.courses)return null;
+  for(const c of plan.courses){if(normName(c.name)===n)return c;}
+  const cands=plan.courses.filter(c=>{const cn=normName(c.name);return (cn.indexOf(n)>=0||n.indexOf(cn)>=0)&&Math.abs(cn.length-n.length)<=3;});
+  return cands.length===1?cands[0]:null;
+}
+/** 从班级名推断年级与专业关键词，如「24软件03班」→ {grade:'2024',kw:'软件'} */
+function inferStudentKey(bj){
+  const s=String(bj||'');
+  const m=s.match(/^(\d{2})/);
+  return {grade:m?'20'+m[1]:'',kw:s.replace(/^\d{2}/,'').replace(/班$/,'').replace(/\d+$/,'').trim()};
+}
+function findBestPlan(grade,kw,courseNames){
+  if(!PLANS.length)return null;
+  let best=null,bestScore=0;
+  PLANS.forEach(p=>{
+    let sc=0;
+    if(p.grade===grade)sc+=10;
+    if(kw&&p.major&&(p.major.indexOf(kw)>=0||kw.indexOf(p.major)>=0))sc+=5;
+    if(courseNames&&courseNames.length){let hit=0;courseNames.forEach(cn=>{if(matchCourse(cn,p))hit++;});sc+=hit;}
+    if(sc>bestScore){bestScore=sc;best=p;}
+  });
+  return bestScore>0?best:null;
+}
+function currentPlan(){const sel=document.getElementById('planSelect');if(!sel||!sel.value)return null;return PLANS.find(p=>p.id===sel.value)||null;}
+function updatePlanHint(){
+  const p=currentPlan(),el=document.getElementById('planMatchHint');
+  if(el)el.textContent=p?('按 '+planLabel(p)+' 计算：必修×0.7 + 限选×0.3'):'';
+}
+function renderPlanSelect(prefer){
+  const sel=document.getElementById('planSelect');
+  const prev=sel.value;
+  sel.innerHTML='<option value="">不匹配（全部课程按必修加权）</option>'
+    +PLANS.map(p=>'<option value="'+p.id+'">'+esc(planLabel(p))+'（必修 '+p.nReq+' / 限选 '+p.nSel+'）</option>').join('');
+  let picked=prefer?PLANS.find(p=>p.id===prefer):null;
+  if(!picked&&prev)picked=PLANS.find(p=>p.id===prev);
+  sel.value=picked?picked.id:'';
+  updatePlanHint();
+}
+function renderPlans(){
+  const el=document.getElementById('planList');
+  if(!PLANS.length){
+    el.innerHTML='<div class="hint" style="padding:8px 0">尚未导入教学计划。导入后，教务成绩单可按学生班级自动匹配必修/限选。</div>';
+    document.getElementById('planFootHint').textContent='共 0 份教学计划';
+    return;
+  }
+  let html='<div class="plansum-title">已导入 '+PLANS.length+' 份教学计划：</div>'
+    +'<div class="previewlist"><table><tr><th>年级</th><th>专业</th><th>学期</th><th>必修</th><th>限选</th><th>课程数</th><th>操作</th></tr>';
+  PLANS.forEach(p=>{
+    html+='<tr><td>'+esc(p.grade||'')+'</td><td>'+esc(p.major||'')+'</td><td>'+esc(p.term||'')+'</td><td>'+p.nReq+'</td><td>'+p.nSel+'</td><td>'+p.courses.length+'</td>'
+      +'<td><button class="linkbtn" data-delplan="'+p.id+'">删除</button></td></tr>';
+  });
+  el.innerHTML=html+'</table></div>';
+  el.querySelectorAll('[data-delplan]').forEach(b=>b.addEventListener('click',()=>{
+    PLANS=PLANS.filter(p=>p.id!==b.dataset.delplan);
+    savePlans();renderPlans();renderPlanSelect();toast('已删除该教学计划','ok');
+  }));
+  document.getElementById('planFootHint').textContent='共 '+PLANS.length+' 份教学计划';
+}
+function parsePlanWorkbook(rows){
+  if(!rows.length)throw new Error('文件为空');
+  let hi=-1;
+  for(let i=0;i<Math.min(rows.length,15);i++){
+    const txt=rows[i].map(h=>String(h)).join(' ');
+    if(txt.indexOf('课程名称')>=0&&txt.indexOf('课程性质')>=0){hi=i;break;}
+  }
+  if(hi<0)throw new Error('未找到表头行（需包含「课程名称」「课程性质」列）');
+  const ii={};
+  rows[hi].forEach((h,i)=>{ii[String(h).trim().replace(/\s+/g,'')]=i;});
+  const pick=(row,keys)=>{for(const k of keys){if(ii[k]!==undefined&&row[ii[k]]!==undefined&&row[ii[k]]!==null&&String(row[ii[k]]).trim()!=='')return String(row[ii[k]]).trim();}return '';};
+  const groups=new Map();
+  rows.slice(hi+1).forEach(row=>{
+    if(!row||!row.length)return;
+    const grade=pick(row,['年级']),major=pick(row,['专业','专业名称']),name=pick(row,['课程名称','课程名']),
+          prop=pick(row,['课程性质','性质']),credit=pick(row,['总学分','学分']),term=pick(row,['学年学期','学期']);
+    if(!name)return;
+    const key=grade+'|'+major+'|'+term;
+    if(!groups.has(key))groups.set(key,{grade,major,term,courses:[]});
+    groups.get(key).courses.push({name,credit:credit===''?0:Number(credit),prop});
+  });
+  const plans=[];
+  groups.forEach(g=>{
+    let nReq=0,nSel=0;
+    g.courses.forEach(c=>{if(propType(c.prop)==='必修')nReq++;else nSel++;});
+    plans.push({id:'p'+Date.now().toString(36)+'_'+plans.length,grade:g.grade,major:g.major,term:g.term,courses:g.courses,nReq,nSel});
+  });
+  return plans;
+}
+
+/* ================= 学业成绩导入（加权平均分） ================= */
+/** 读取 Excel / CSV 为二维数组 */
+function readWorkbook(file){
+  return new Promise((resolve,reject)=>{
+    if(typeof XLSX==='undefined'){reject(new Error('Excel 解析组件未加载（需联网），可改用下方「导入学生/成绩」的文本方式粘贴'));return;}
+    const fr=new FileReader();
+    fr.onerror=()=>reject(new Error('文件读取失败'));
+    fr.onload=()=>{
+      try{
+        const buf=fr.result;
+        const wb=/\.csv$/i.test(file.name)
+          ?XLSX.read(new TextDecoder('utf-8').decode(buf),{type:'string'})
+          :XLSX.read(buf,{type:'array'});
+        const ws=wb.Sheets[wb.SheetNames[0]];
+        resolve(XLSX.utils.sheet_to_json(ws,{header:1,defval:''}));
+      }catch(e){reject(e);}
+    };
+    fr.readAsArrayBuffer(file);
+  });
+}
+/** 加权平均：必修×0.7 + 限选×0.3，再 ×0.8 得 80 分制专业成绩 */
+function weightedZhuanye(courses){
+  let rsum=0,rc=0,lsum=0,lc=0;
+  courses.forEach(c=>{if(c.required){rsum+=c.score*c.credit;rc+=c.credit;}else{lsum+=c.score*c.credit;lc+=c.credit;}});
+  let z=null;
+  if(rc>0&&lc>0)z=(rsum/rc*0.7+lsum/lc*0.3)*0.8;
+  else if(rc>0)z=(rsum/rc)*0.8;
+  else if(lc>0)z=(lsum/lc)*0.8;
+  return z===null?null:Math.round(z*100)/100;
+}
+/** 解析成绩单：宽表（教务成绩单）/ 课程明细 / 直接成绩 */
+function parseScoreRows(headers,rows,plan){
+  const idx={};
+  headers.forEach((h,i)=>{idx[normH(h)]=i;});
+  const issues=[];
+  const wideCols=headers.map((h,i)=>{
+    const s=String(h);
+    const m=s.match(/\(学分\s*[:：]\s*([\d.]+)\)/);
+    return m?{i,name:s.replace(/\s*\(学分\s*[:：]\s*[\d.]+\)\s*$/,'').trim(),credit:Number(m[1])}:null;
+  }).filter(Boolean);
+  const isWide=wideCols.length>=2&&idx['学号']!==undefined;
+  const get=(row,keys)=>{
+    for(const k of keys){
+      if(idx[k]!==undefined&&row[idx[k]]!==undefined&&row[idx[k]]!==null&&String(row[idx[k]]).trim()!=='')return String(row[idx[k]]).trim();
+    }
+    return '';
+  };
+  const stMap=new Map(),order=[];
+  const touch=(xh,xm,bj)=>{
+    if(!stMap.has(xh)){stMap.set(xh,{xh,xm,bj,courses:[]});order.push(xh);}
+    else{const o=stMap.get(xh);if(xm&&!o.xm)o.xm=xm;if(bj&&!o.bj)o.bj=bj;}
+    return stMap.get(xh);
+  };
+
+  if(isWide){
+    const bji=idx['班级']!==undefined?idx['班级']:idx['班别'];
+    const unmatched=new Set();
+    rows.forEach(row=>{
+      if(!row||!row.length)return;
+      const xh=idx['学号']!==undefined?String(row[idx['学号']]===undefined?'':row[idx['学号']]).trim():'';
+      const xm=idx['姓名']!==undefined?String(row[idx['姓名']]===undefined?'':row[idx['姓名']]).trim():'';
+      const bj=bji!==undefined?String(row[bji]===undefined?'':row[bji]).trim():'';
+      if(!xh&&!xm)return;
+      const o=touch(xh,xm,bj);
+      wideCols.forEach(c=>{
+        const v=row[c.i];
+        if(v===undefined||v===null||String(v).trim()===''||isNaN(Number(v)))return;
+        let required=true;
+        if(plan){
+          const mc=matchCourse(c.name,plan);
+          if(mc)required=propType(mc.prop)==='必修';
+          else unmatched.add(c.name);
+        }
+        o.courses.push({name:c.name,credit:c.credit,required,score:Number(v)});
+      });
+    });
+    if(plan&&unmatched.size)issues.push('教学计划未匹配课程：'+Array.from(unmatched).join('、')+'（已按必修计）');
+    return {
+      mode:'wide',planUsed:plan?planLabel(plan):'',issues,
+      students:order.map(xh=>{
+        const o=stMap.get(xh);
+        return {xh:o.xh,xm:o.xm,bj:o.bj,zhuanye:weightedZhuanye(o.courses),courseCount:o.courses.length};
+      })
+    };
+  }
+
+  const mode=['课程','学分','性质','成绩'].some(k=>idx[k]!==undefined)?'detail':'direct';
+  rows.forEach(row=>{
+    if(!row||!row.length)return;
+    const xh=get(row,['学号','id','student_id']);
+    const xm=get(row,['姓名','name']);
+    const bj=get(row,['班级','班别']);
+    if(!xh&&!xm)return;
+    const o=touch(xh,xm,bj);
+    if(mode==='detail'){
+      const cname=get(row,['课程','课程名称','课程名','科目']);
+      const credit=get(row,['学分','credit']);
+      const prop=get(row,['课程性质','性质','必修限选']);
+      const score=get(row,['成绩','分数','score']);
+      if(cname&&score!=='')o.courses.push({name:cname,credit:credit===''?1:Number(credit),required:!/限选|选修/.test(prop),score:Number(score)});
+    }else{
+      const zy=get(row,['专业成绩','专业成绩分','加权平均分','zhuanye']);
+      o.direct=zy===''?null:Math.round(Number(zy)*100)/100;
+    }
+  });
+  return {
+    mode,planUsed:plan?planLabel(plan):'',issues,
+    students:order.map(xh=>{
+      const o=stMap.get(xh);
+      return {
+        xh:o.xh,xm:o.xm,bj:o.bj,courseCount:o.courses.length,
+        zhuanye:mode==='detail'?weightedZhuanye(o.courses):(o.direct===undefined?null:o.direct)
+      };
+    })
+  };
+}
+function showScorePreview(result){
+  pendingScores=result;
+  const modeTxt=result.mode==='wide'?'教务成绩单模式（按课程学分加权 ×0.8）'
+    :(result.mode==='detail'?'课程明细模式（自动加权计算专业成绩）':'直接成绩模式');
+  const ok=result.students.filter(s=>s.zhuanye!==null&&s.zhuanye!==undefined&&!isNaN(s.zhuanye));
+  let html='识别到 <b>'+result.students.length+'</b> 名学生 · '+modeTxt;
+  if(result.planUsed)html+=' · <span class="good">'+esc(result.planUsed)+'</span>';
+  if(result.issues.length)html+=' · <span class="bad">'+result.issues.length+' 条提示</span>';
+  html+=' · 可导入 <b>'+ok.length+'</b> 人';
+  html+='<div class="previewlist"><table><tr><th>学号</th><th>姓名</th><th>专业成绩(80分制)</th><th>课程数</th></tr>';
+  result.students.slice(0,12).forEach(s=>{
+    const zy=(s.zhuanye===null||s.zhuanye===undefined||isNaN(s.zhuanye))?'<span class="bad">待填</span>':s.zhuanye;
+    html+='<tr><td>'+esc(s.xh)+'</td><td>'+esc(s.xm)+'</td><td>'+zy+'</td><td>'+(s.courseCount||'')+'</td></tr>';
+  });
+  if(result.students.length>12)html+='<tr><td colspan="4">…共 '+result.students.length+' 名</td></tr>';
+  html+='</table></div>';
+  if(result.issues.length)html+='<div class="hint" style="margin-top:6px">'+result.issues.map(i=>esc(i)).join('<br>')+'</div>';
+  document.getElementById('scorePreview').innerHTML=html;
+  document.getElementById('btnScoreImport').disabled=ok.length===0;
+}
+async function handleScoreFile(file){
+  const el=document.getElementById('scorePreview');
+  document.getElementById('btnScoreImport').disabled=true;
+  pendingScores=null;
+  try{
+    const rows=await readWorkbook(file);
+    if(!rows.length)throw new Error('文件为空');
+    let hi=-1;
+    for(let i=0;i<Math.min(rows.length,30);i++){
+      const txt=rows[i].map(h=>String(h)).join(' ');
+      if(txt.indexOf('学号')>=0&&txt.indexOf('姓名')>=0){hi=i;break;}
+    }
+    if(hi<0)throw new Error('未找到表头行，请确认文件包含「学号」「姓名」列');
+    const headers=rows[hi].map(h=>String(h).trim());
+    const data=rows.slice(hi+1);
+    // 依首个数据行的班级自动匹配教学计划（如 24软件03班 → 2024级 / 软件）
+    try{
+      const hs=headers.map(normH);
+      const bji=hs.indexOf('班级')>=0?hs.indexOf('班级'):hs.indexOf('班别');
+      const first=data[0]||[];
+      const bjVal=bji>=0?String(first[bji]===undefined?'':first[bji]):'';
+      const ik=inferStudentKey(bjVal);
+      const courseNames=headers.map(h=>{
+        const m=String(h).match(/\(学分\s*[:：]\s*([\d.]+)\)/);
+        return m?String(h).replace(/\s*\(学分\s*[:：]\s*[\d.]+\)\s*$/,'').trim():null;
+      }).filter(Boolean);
+      const bp=findBestPlan(ik.grade,ik.kw,courseNames);
+      const sel=document.getElementById('planSelect');
+      if(bp&&sel.value!==bp.id){sel.value=bp.id;updatePlanHint();}
+    }catch(e){}
+    const result=parseScoreRows(headers,data,currentPlan());
+    if(!result.students.length)throw new Error('未识别到有效数据，请检查表头是否包含「学号」「姓名」');
+    showScorePreview(result);
+  }catch(e){
+    el.innerHTML='<span class="bad">'+esc((e&&e.message)||e)+'</span>';
+  }
+}
+async function handlePlanFiles(files){
+  const el=document.getElementById('planPreview');
+  let html='',added=0;
+  for(const file of Array.from(files)){
+    try{
+      const rows=await readWorkbook(file);
+      const plans=parsePlanWorkbook(rows);
+      plans.forEach(p=>{p.file=file.name;});
+      html+=esc(file.name)+' → '+plans.length+' 份教学计划';
+      plans.forEach(p=>{html+='（'+esc(planLabel(p))+' 必修'+p.nReq+' / 限选'+p.nSel+'）';});
+      html+='<br>';
+      if(plans.length){PLANS=PLANS.concat(plans);added+=plans.length;}
+    }catch(e){
+      html+='<span class="bad">'+esc(file.name)+' 解析失败：'+esc((e&&e.message)||e)+'</span><br>';
+    }
+  }
+  el.innerHTML=html||'<span class="bad">未读取到文件</span>';
+  if(added){savePlans();renderPlans();renderPlanSelect();toast('已导入 '+added+' 份教学计划','ok');}
+}
+function bindDropzone(zone,input,onFiles){
+  zone.addEventListener('click',()=>input.click());
+  ['dragenter','dragover'].forEach(ev=>zone.addEventListener(ev,e=>{e.preventDefault();zone.classList.add('over');}));
+  ['dragleave','drop'].forEach(ev=>zone.addEventListener(ev,e=>{e.preventDefault();zone.classList.remove('over');}));
+  zone.addEventListener('drop',e=>{const fs=e.dataTransfer&&e.dataTransfer.files;if(fs&&fs.length)onFiles(fs);});
+  input.addEventListener('change',e=>{if(e.target.files.length)onFiles(e.target.files);e.target.value='';});
+}
+
+document.getElementById('btnPlanLib').addEventListener('click',()=>{
+  renderPlans();renderPlanSelect();
+  document.getElementById('planOverlay').classList.add('open');
+});
+document.getElementById('planClose').addEventListener('click',()=>{document.getElementById('planOverlay').classList.remove('open');});
+document.getElementById('planDone').addEventListener('click',()=>{document.getElementById('planOverlay').classList.remove('open');});
+document.getElementById('planOverlay').addEventListener('click',e=>{if(e.target===document.getElementById('planOverlay'))document.getElementById('planOverlay').classList.remove('open');});
+document.getElementById('planClear').addEventListener('click',()=>{
+  if(!PLANS.length)return;
+  if(!confirm('确认清空全部 '+PLANS.length+' 份教学计划？'))return;
+  PLANS=[];savePlans();renderPlans();renderPlanSelect();toast('已清空教学计划','ok');
+});
+document.getElementById('planSelect').addEventListener('change',updatePlanHint);
+bindDropzone(document.getElementById('planZone'),document.getElementById('planInput'),handlePlanFiles);
+bindDropzone(document.getElementById('scoreZone'),document.getElementById('scoreFile'),files=>handleScoreFile(files[0]));
+loadPlans();
+renderPlanSelect();
+
+document.getElementById('btnScoreImport').addEventListener('click',async()=>{
+  if(!pendingScores){toast('请先选择成绩文件','err');return;}
+  const ok=pendingScores.students.filter(s=>s.zhuanye!==null&&s.zhuanye!==undefined&&!isNaN(s.zhuanye));
+  if(!ok.length){toast('没有可导入的专业成绩','err');return;}
+  const cls=document.getElementById('scoreClass').value.trim();
+  const updateExisting=document.getElementById('scoreUpdate').checked;
+  if(!cls&&!updateExisting){toast('新建学生需填写目标班级','err');return;}
+  const btn=document.getElementById('btnScoreImport');
+  btn.disabled=true;
+  const r=await apiPost('/api/teacher/import',{
+    class_name:cls,
+    update_existing:updateExisting,
+    rows:ok.map(s=>({xh:s.xh,xm:s.xm,zhuanye_score:s.zhuanye}))
+  });
+  btn.disabled=false;
+  if(r.code!==0){toast(r.msg||'导入失败','err');return;}
+  const d=r.data,updated=d.updated||[],skipped=d.skipped||[],created=d.created||[];
+  document.getElementById('scorePreview').innerHTML='导入完成：新增 <b>'+created.length+'</b> 人，更新 <b>'+updated.length+'</b> 人，跳过 '+skipped.length+' 人。'
+    +(skipped.length?'<div class="hint" style="margin-top:6px">跳过原因：'+skipped.slice(0,5).map(s=>esc(s.xh)+'（'+esc(s.reason)+'）').join('、')+(skipped.length>5?' 等':'')+'</div>':'');
+  toast('成绩导入完成：更新 '+updated.length+' 人'+(created.length?('，新增 '+created.length+' 人'):''),'ok');
+  pendingScores=null;
+  loadMyClasses();loadStudents();
 });
 
 document.querySelectorAll('#mainTabs .tabbtn').forEach(btn=>{

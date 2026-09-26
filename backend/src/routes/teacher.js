@@ -155,27 +155,31 @@ export async function handleTeacher(path, method, ctx) {
     const rows = Array.isArray(d.rows) ? d.rows : parseImportRows(String(d.csv || ''));
     if (rows.length === 0) return fail('没有可导入的数据', 400, env);
 
-    const className = d.class_name || (rows.find(r => r.bj) || {}).bj || '';
-    if (!className) return fail('请指定班级名称', 400, env);
+    // update_existing：学号已存在时更新姓名 / 专业 / 学业成绩（用于批量导入成绩）
+    const updateExisting = !!d.update_existing;
+    const className = String(d.class_name || (rows.find(r => r.bj) || {}).bj || '').trim();
 
-    // 找到或创建班级，并校验归属
-    let cls = await db.queryOne('SELECT * FROM classes WHERE name = ?', [className]);
-    if (!cls) {
-      const r = await db.insert(
-        'INSERT INTO classes (name, teacher_account, major, grade, created_at) VALUES (?, ?, ?, ?, ?)',
-        [className, teacherAccount, d.major || '', d.grade || '', now()]
-      );
-      cls = { id: r.insertId, name: className, teacher_account: teacherAccount };
-    } else if (cls.teacher_account !== teacherAccount) {
-      return fail(`班级「${className}」归属其他辅导员（${cls.teacher_account}）`, 403, env);
+    // 找到或创建班级，并校验归属；「仅按学号更新已有学生」时允许不填班级
+    let cls = null;
+    if (className) {
+      cls = await db.queryOne('SELECT * FROM classes WHERE name = ?', [className]);
+      if (!cls) {
+        const r = await db.insert(
+          'INSERT INTO classes (name, teacher_account, major, grade, created_at) VALUES (?, ?, ?, ?, ?)',
+          [className, teacherAccount, d.major || '', d.grade || '', now()]
+        );
+        cls = { id: r.insertId, name: className, teacher_account: teacherAccount };
+      } else if (cls.teacher_account !== teacherAccount) {
+        return fail(`班级「${className}」归属其他辅导员（${cls.teacher_account}）`, 403, env);
+      }
+    } else if (!updateExisting) {
+      return fail('请指定班级名称', 400, env);
     }
 
     const hash = bcrypt.hashSync(DEFAULT_STUDENT_PASSWORD, 10);
     const created = [];
     const updated = [];
     const skipped = [];
-    // update_existing：学号已存在时更新姓名 / 专业 / 学业成绩（用于批量导入成绩）
-    const updateExisting = !!d.update_existing;
 
     for (const row of rows) {
       const xh = String(row.xh || row[0] || '').trim();
@@ -206,6 +210,7 @@ export async function handleTeacher(path, method, ctx) {
       }
 
       if (!xm) { skipped.push({ xh, reason: '新生缺少姓名' }); continue; }
+      if (!cls) { skipped.push({ xh, reason: '未指定班级，无法新建学生' }); continue; }
 
       const zhuanye = String(row.zhuanye || row[2] || d.major || '').trim();
       // 学号即账号，初始密码统一 123456
@@ -221,7 +226,7 @@ export async function handleTeacher(path, method, ctx) {
       created.push(xh);
     }
 
-    return ok({ class_id: cls.id, class_name: className, teacher_account: teacherAccount, created, updated, skipped }, env);
+    return ok({ class_id: cls ? cls.id : null, class_name: className, teacher_account: teacherAccount, created, updated, skipped }, env);
   }
 
   // ===================== 学生信息与成绩 =====================
