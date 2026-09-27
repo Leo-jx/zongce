@@ -39,12 +39,22 @@ const STUDENT_STATUS_ALLOWED = ['在读', '休学', '退学', '转学', '保留�
 const JSON_FIELDS = ['deyu_ganbu', 'deyu_rongyu', 'zhiyu_jineng'];
 
 /**
- * 归属过滤：超级管理员看全部，辅导员只看自己的。
+ * 本学院专业范围：辅导员可查看本学院所有专业的学生 / 班级（含非本人所管的班级），
+ * 便于跨辅导员查看同学院数据；写操作仍通过 assertOwnClass / assertOwnStudent 限制为本人负责。
+ */
+const COLLEGE_MAJORS = ['移动应用开发', '数字媒体技术', '软件技术', '云计算技术应用', '工业机器人技术', '软件工程'];
+
+/**
+ * 归属过滤：超级管理员看全部；辅导员看「本学院专业的学生 + 本人负责的班级」。
  * @returns {{sql:string, params:any[]}} 追加到 WHERE 后的片段
  */
 function ownerScope(ctx, alias = 's') {
   if (ctx.user.role === 'admin') return { sql: '', params: [] };
-  return { sql: ` AND ${alias}.fdy = ?`, params: [ctx.user.account] };
+  const ph = COLLEGE_MAJORS.map(() => '?').join(',');
+  return {
+    sql: ` AND (${alias}.zhuanye IN (${ph}) OR ${alias}.fdy = ?)`,
+    params: [...COLLEGE_MAJORS, ctx.user.account]
+  };
 }
 
 /** 校验班级是否归属当前辅导员 */
@@ -85,7 +95,11 @@ export async function handleTeacher(path, method, ctx) {
     let sql = `SELECT c.*, (SELECT COUNT(*) FROM students s WHERE s.class_id = c.id) AS student_count
                FROM classes c WHERE 1=1`;
     const params = [];
-    if (ctx.user.role !== 'admin') { sql += ' AND c.teacher_account = ?'; params.push(ctx.user.account); }
+    if (ctx.user.role !== 'admin') {
+      const ph = COLLEGE_MAJORS.map(() => '?').join(',');
+      sql += ` AND (c.major IN (${ph}) OR c.teacher_account = ?)`;
+      params.push(...COLLEGE_MAJORS, ctx.user.account);
+    }
     sql += ' ORDER BY c.name';
     return ok(await db.query(sql, params), env);
   }
@@ -169,9 +183,15 @@ export async function handleTeacher(path, method, ctx) {
           'INSERT INTO classes (name, teacher_account, major, grade, created_at) VALUES (?, ?, ?, ?, ?)',
           [className, teacherAccount, d.major || '', d.grade || '', now()]
         );
-        cls = { id: r.insertId, name: className, teacher_account: teacherAccount };
-      } else if (cls.teacher_account !== teacherAccount) {
-        return fail(`班级「${className}」归属其他辅导员（${cls.teacher_account}）`, 403, env);
+        cls = { id: r.insertId, name: className, teacher_account: teacherAccount, grade: d.grade || '' };
+      } else {
+        if (cls.teacher_account !== teacherAccount) {
+          return fail(`班级「${className}」归属其他辅导员（${cls.teacher_account}）`, 403, env);
+        }
+        // 导入时若显式给出年级，则同步更新班级年级（首次导入或后续修正）
+        if (d.grade && cls.grade !== d.grade) {
+          await db.update('UPDATE classes SET grade = ? WHERE id = ?', [d.grade, cls.id]);
+        }
       }
     } else if (!updateExisting) {
       return fail('请指定班级名称', 400, env);
@@ -234,7 +254,7 @@ export async function handleTeacher(path, method, ctx) {
   if (path === STUDENTS_PATH && method === 'GET') {
     const denied = requirePerm(ctx, 'student:read'); if (denied) return denied;
     const { bj, xh, xm, class_id } = Object.fromEntries(searchParams);
-    let sql = 'SELECT * FROM students s WHERE 1=1';
+    let sql = 'SELECT s.*, COALESCE(c.grade, \'\') AS grade FROM students s LEFT JOIN classes c ON s.class_id = c.id WHERE 1=1';
     const params = [];
     const scope = ownerScope(ctx);
     sql += scope.sql; params.push(...scope.params);

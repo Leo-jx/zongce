@@ -71,6 +71,7 @@ table.main tbody tr:hover{background:#f7fafd}
 .td-total{font-size:15px;font-weight:800;color:var(--primary)}
 .td-kou{color:var(--bad);font-weight:600}
 .tag-edit{display:inline-flex;align-items:center;gap:4px;background:var(--primary-bg);color:var(--primary);border:1px solid #cfe0f3;border-radius:6px;padding:4px 10px;font-size:12px}
+.tag-mine{display:inline-block;font-size:11px;padding:1px 7px;border-radius:10px;background:#e7f6ed;color:#1f9d55;border:1px solid #bfe3ce;margin-left:4px}
 .tag-edit:hover{background:#dbeaf8}
 .tag-del{border:0;background:transparent;color:var(--ink-3);font-size:12px;padding:4px 6px;border-radius:6px}
 .tag-del:hover{color:var(--bad);background:#fbeceb}
@@ -304,6 +305,10 @@ table.grid tbody tr:hover{background:#f7fafd}
         </span>
         <span class="hint">休学 / 退学等状态的学生不参与本学年排名与统计</span>
       </div>
+      <div class="filters" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="filterGrade" class="imp-input" style="min-width:120px"><option value="">全部年级</option></select>
+        <select id="filterMajor" class="imp-input" style="min-width:170px"><option value="">全部专业</option></select>
+      </div>
       <div class="right">
         <button class="btn" id="btnGoImportScore">导入成绩</button>
         <button class="btn" id="btnBackup">导出数据备份</button>
@@ -321,14 +326,14 @@ table.grid tbody tr:hover{background:#f7fafd}
           <colgroup>
             <col class="col-chk"><col class="col-rank"><col class="col-xh"><col class="col-xm"><col class="col-status">
             <col class="col-mod"><col class="col-mod"><col class="col-mod"><col class="col-mod"><col class="col-mod"><col class="col-mod">
-            <col class="col-total"><col class="col-op">
+            <col class="col-total"><col class="col-mrank"><col class="col-op">
           </colgroup>
           <thead>
             <tr>
               <th class="col-chk"><input type="checkbox" id="chkAll" title="全选"></th>
               <th>排名</th><th>学号</th><th>姓名</th><th>状态</th>
               <th>德<br>（20%）</th><th>智<br>（50%）</th><th>体<br>（10%）</th><th>美<br>（10%）</th><th>劳<br>（10%）</th><th>扣分</th>
-              <th>综测分数</th><th>操作</th>
+              <th>综测分数</th><th>年级专业排名</th><th>操作</th>
             </tr>
           </thead>
           <tbody id="scoreTbody"></tbody>
@@ -351,6 +356,8 @@ table.grid tbody tr:hover{background:#f7fafd}
         <input id="impClass" class="imp-input" placeholder="如 护理2301">
         <span class="imp-lab">专业</span>
         <input id="impMajor" class="imp-input" placeholder="如 护理">
+        <span class="imp-lab">年级</span>
+        <input id="impGrade" class="imp-input" placeholder="如 2023" style="width:90px">
       </div>
       <div class="imp-row">
         <label class="imp-lab" style="display:flex;align-items:center;gap:6px">
@@ -411,7 +418,7 @@ table.grid tbody tr:hover{background:#f7fafd}
     </div>
 
     <div class="card">
-      <h2>我的班级</h2>
+      <h2>本学院班级（含非本人所管，仅「我的」可编辑 / 删除）</h2>
       <div class="tblwrap"><table class="grid" id="classTable"></table></div>
     </div>
 
@@ -482,6 +489,25 @@ table.grid tbody tr:hover{background:#f7fafd}
       <span class="hint" id="planFootHint" style="margin-right:auto"></span>
       <button class="btn" id="planClear">清空教学计划</button>
       <button class="btn primary" id="planDone">完成</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="classEditOverlay">
+  <div class="dialog">
+    <div class="head">
+      <h2>编辑班级</h2>
+      <button class="icon-x" id="classEditClose" aria-label="关闭">×</button>
+    </div>
+    <div class="body">
+      <div class="imp-row"><span class="imp-lab">班级名称</span><input id="ceName" class="imp-input" style="min-width:220px"></div>
+      <div class="imp-row"><span class="imp-lab">专业</span><input id="ceMajor" class="imp-input" style="min-width:220px" placeholder="如 移动应用开发"></div>
+      <div class="imp-row"><span class="imp-lab">年级</span><input id="ceGrade" class="imp-input" style="min-width:220px" placeholder="如 2023"></div>
+      <div class="hint">修改班级名称将同步更新该班学生的「班级」字段；修改年级会影响「本年级该专业」排名口径。仅本人所管班级可编辑 / 删除。</div>
+    </div>
+    <div class="foot">
+      <button class="btn" id="classEditCancel">取消</button>
+      <button class="btn primary" id="classEditSave">保存</button>
     </div>
   </div>
 </div>
@@ -785,12 +811,23 @@ async function loadStudents(){
       const total=de*0.20+zhi*0.50+ti*0.10+mei*0.10+lao*0.10+ko;
       return {...s, deyuScore:de, zhiyuScore:zhi, tiyuScore:ti, meiyuScore:mei, laoyuScore:lao, koufenScore:ko, zongceScore:Math.max(0,Math.round(total*100)/100)};
     });
-    // 排名与统计仅针对「在读」学生（休学 / 退学等不参与本学年测评）
+    // 全局排名：仅针对「在读」学生（休学 / 退学等不参与本学年测评）
     const active=raw.filter(s=>s.status==='在读').sort((a,b)=>b.zongceScore-a.zongceScore);
     active.forEach((s,i)=>s.rank=i+1);
     const inactive=raw.filter(s=>s.status!=='在读').sort((a,b)=>b.zongceScore-a.zongceScore);
     inactive.forEach(s=>s.rank=null);
+
+    // 本年级该专业排名：在（年级 + 专业）组内按综测分降序
+    const groups={};
+    active.forEach(s=>{const k=(s.grade||'')+'|'+(s.zhuanye||'');(groups[k]=groups[k]||[]).push(s);});
+    Object.values(groups).forEach(g=>{
+      g.sort((a,b)=>b.zongceScore-a.zongceScore);
+      g.forEach((s,i)=>{s.majorRank=i+1;s.majorTotal=g.length;});
+    });
+    inactive.forEach(s=>{s.majorRank=null;s.majorTotal=null;});
+
     studentsData=active.concat(inactive);
+    populateScoreFilters();
     renderScoreTable();
   }catch(e){toast('学生数据加载失败：'+((e&&e.message)||e),'err');}
 }
@@ -798,9 +835,12 @@ async function loadStudents(){
 function renderScoreTable(){
   const tbody=document.getElementById('scoreTbody');
   const empty=document.getElementById('scoreEmpty');
-  const n=studentsData.length;
+  const fg=document.getElementById('filterGrade').value;
+  const fm=document.getElementById('filterMajor').value;
+  const view=studentsData.filter(s=>(!fg||(s.grade||'')===fg)&&(!fm||(s.zhuanye||'')===fm));
+  const n=view.length;
   document.getElementById('stCount').textContent=n;
-  const active=studentsData.filter(s=>s.status==='在读');
+  const active=view.filter(s=>s.status==='在读');
   if(!n){tbody.innerHTML='';empty.style.display='block';document.getElementById('stAvg').textContent='–';document.getElementById('stTop').textContent='–';return;}
   empty.style.display='none';
   const total=active.reduce((a,s)=>a+s.zongceScore,0);
@@ -808,7 +848,7 @@ function renderScoreTable(){
   document.getElementById('stAvg').textContent=active.length?(total/active.length).toFixed(2):'–';
   document.getElementById('stTop').textContent=tops.length?tops[0].toFixed(2):'–';
 
-  tbody.innerHTML=studentsData.map(s=>{
+  tbody.innerHTML=view.map(s=>{
     const ko=s.koufenScore;
     return `<tr class="${s.status!=='在读'?'inactive-row':''}">
       <td class="col-chk"><input type="checkbox" class="rowchk" data-id="${s.id}"></td>
@@ -821,11 +861,26 @@ function renderScoreTable(){
       <td class="mod-lao"><span class="mod-score">${s.laoyuScore.toFixed(1)}</span></td>
       <td class="mod-ko"><span class="td-kou">${ko<0?ko.toFixed(0):'0'}</span></td>
       <td><span class="td-total">${s.zongceScore.toFixed(2)}</span></td>
+      <td>${s.majorRank==null?'—':s.majorRank+'/'+s.majorTotal}</td>
       <td><button class="tag-edit" data-sid="${s.id}">编辑</button></td>
     </tr>`;
   }).join('');
   updateSelCount();
 }
+
+// 用当前学生数据填充「年级 / 专业」筛选下拉
+function populateScoreFilters(){
+  const fg=document.getElementById('filterGrade'),fm=document.getElementById('filterMajor');
+  const gSet=[...new Set(studentsData.map(s=>(s.grade||'').trim()).filter(Boolean))].sort();
+  const mSet=[...new Set(studentsData.map(s=>(s.zhuanye||'').trim()).filter(Boolean))].sort();
+  const gv=fg.value,mv=fm.value;
+  fg.innerHTML='<option value="">全部年级</option>'+gSet.map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join('');
+  fm.innerHTML='<option value="">全部专业</option>'+mSet.map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join('');
+  if(gSet.includes(gv))fg.value=gv;
+  if(mSet.includes(mv))fm.value=mv;
+}
+document.getElementById('filterGrade').addEventListener('change',renderScoreTable);
+document.getElementById('filterMajor').addEventListener('change',renderScoreTable);
 function getSelectedIds(){return Array.from(document.querySelectorAll('.rowchk:checked')).map(c=>Number(c.dataset.id));}
 function updateSelCount(){
   const sel=getSelectedIds();
@@ -1009,16 +1064,27 @@ async function loadMyClasses(){
   let html='<thead><tr><th>班级</th><th>专业</th><th>年级</th><th>学生数</th><th>辅导员</th><th>操作</th></tr></thead><tbody>';
   if(!myClasses.length)html+='<tr><td colspan="6" style="padding:18px;text-align:center;color:var(--ink-3)">暂无班级，请先导入学生</td></tr>';
   myClasses.forEach(c=>{
-    html+=`<tr><td>${esc(c.name)}</td><td>${esc(c.major||'')}</td><td>${esc(c.grade||'')}</td><td>${esc(c.student_count)}</td><td>${esc(c.teacher_account)}</td>`
-      +`<td><button class="btn danger" style="padding:4px 10px;font-size:12px" data-cid="${c.id}" data-cname="${esc(c.name)}" data-cnt="${Number(c.student_count)||0}">一键删除本班及学生</button></td></tr>`;
+    const mine=c.teacher_account===USER.account;
+    const ops=(mine
+        ? `<button class="btn" style="padding:4px 10px;font-size:12px" data-edit-cid="${c.id}">编辑</button> `
+        : `<span class="hint">非本人所管（只读）</span> `)
+      + `<button class="btn danger" style="padding:4px 10px;font-size:12px" data-cid="${c.id}" data-cname="${esc(c.name)}" data-cnt="${Number(c.student_count)||0}"${mine?'':' disabled title="仅能删除本人所管班级"'}>一键删除本班及学生</button>`;
+    html+=`<tr><td>${esc(c.name)}${mine?' <span class="tag-mine">我的</span>':''}</td><td>${esc(c.major||'')}</td><td>${esc(c.grade||'')}</td><td>${esc(c.student_count)}</td><td>${esc(c.teacher_account)}</td>`
+      +`<td>${ops}</td></tr>`;
   });
   document.getElementById('classTable').innerHTML=html+'</tbody>';
 }
 
-// 一键删除班级及其全部学生（级联删除，不可恢复）
+// 班级表格操作：编辑 / 删除
 document.getElementById('classTable').addEventListener('click',async e=>{
+  const editBtn=e.target.closest('[data-edit-cid]');
+  if(editBtn){
+    const c=myClasses.find(x=>String(x.id)===String(editBtn.dataset.editCid));
+    if(c)openClassEdit(c);
+    return;
+  }
   const btn=e.target.closest('[data-cid]');
-  if(!btn)return;
+  if(!btn||btn.disabled)return;
   const cid=btn.dataset.cid,cname=btn.dataset.cname,cnt=Number(btn.dataset.cnt)||0;
   const tip='确认删除班级「'+cname+'」'+(cnt?'及其 '+cnt+' 名学生':'')+'？\n学生的登录账号、考勤与申请记录将一并删除，且不可恢复。';
   if(!confirm(tip))return;
@@ -1028,6 +1094,30 @@ document.getElementById('classTable').addEventListener('click',async e=>{
     if(r.code===0){toast('已删除班级「'+cname+'」'+(cnt?'及 '+cnt+' 名学生':''),'ok');loadMyClasses();loadStudents();}
     else{toast(r.msg||'删除失败','err');btn.disabled=false;}
   }catch(err){toast('删除失败：'+((err&&err.message)||err),'err');btn.disabled=false;}
+});
+
+// 班级编辑弹窗
+let editingClassId=null;
+function openClassEdit(c){
+  editingClassId=c.id;
+  document.getElementById('ceName').value=c.name||'';
+  document.getElementById('ceMajor').value=c.major||'';
+  document.getElementById('ceGrade').value=c.grade||'';
+  document.getElementById('classEditOverlay').classList.add('open');
+}
+document.getElementById('classEditClose').addEventListener('click',()=>document.getElementById('classEditOverlay').classList.remove('open'));
+document.getElementById('classEditCancel').addEventListener('click',()=>document.getElementById('classEditOverlay').classList.remove('open'));
+document.getElementById('classEditSave').addEventListener('click',async()=>{
+  if(!editingClassId)return;
+  const d={name:document.getElementById('ceName').value.trim(),major:document.getElementById('ceMajor').value.trim(),grade:document.getElementById('ceGrade').value.trim()};
+  if(!d.name){toast('班级名称不能为空','err');return;}
+  const btn=document.getElementById('classEditSave');btn.disabled=true;
+  const r=await apiPut('/api/teacher/classes/'+encodeURIComponent(editingClassId),d);
+  btn.disabled=false;
+  if(r.code!==0){toast(r.msg||'保存失败','err');return;}
+  toast('班级已更新','ok');
+  document.getElementById('classEditOverlay').classList.remove('open');
+  loadMyClasses();loadStudents();
 });
 
 // 通用：渲染导入结果（文本 / Excel 共用）
@@ -1054,6 +1144,7 @@ document.getElementById('btnImport').addEventListener('click',async()=>{
     teacher_account:teacher,
     class_name:cls,
     major:document.getElementById('impMajor').value.trim(),
+    grade:resolveImportGrade(null),
     update_existing:document.getElementById('impUpdate').checked,
     csv
   });
@@ -1074,35 +1165,48 @@ function parseRosterRows(rows){
     const pick=keys=>{for(const k of keys){const i=header.indexOf(k);if(i>=0)return i;}return -1;};
     const ix={xh:pick(['学号','id','studentid','student_id']),xm:pick(['姓名','名字','name']),
       zy:pick(['专业','专业名称','major','zhuanye']),bj:pick(['班级','班别','class','bj']),
-      sc:pick(['专业成绩','成绩','分数','score','zhuanye_score'])};
+      nj:pick(['年级','grade','入学年份','年份']),sc:pick(['专业成绩','成绩','分数','score','zhuanye_score'])};
     return rows.slice(headerIdx+1).filter(r=>r&&r.length).map(r=>{
       const xh=ix.xh>=0?String(r[ix.xh]||'').trim():'';
       const xm=ix.xm>=0?String(r[ix.xm]||'').trim():'';
       const zy=ix.zy>=0?String(r[ix.zy]||'').trim():'';
       const bj=ix.bj>=0?String(r[ix.bj]||'').trim():'';
+      const nj=ix.nj>=0?String(r[ix.nj]||'').trim():'';
       const sc=ix.sc>=0?String(r[ix.sc]||'').trim():'';
-      return {xh,xm,zhuanye:zy,bj,zhuanye_score:sc===''?'':Number(sc)};
+      return {xh,xm,zhuanye:zy,bj,nj,zhuanye_score:sc===''?'':Number(sc)};
     }).filter(r=>r.xh);
   }
-  // 无表头：按列序 [学号,姓名,专业,成绩]
+  // 无表头：按列序 [学号,姓名,专业,成绩]（年级不在列序内，由导入表单的「年级」字段决定）
   return rows.filter(r=>r&&r.length&&String(r[0]||'').trim()).map(r=>({
     xh:String(r[0]||'').trim(),
     xm:String(r[1]||'').trim(),
     zhuanye:String(r[2]||'').trim(),
     bj:'',
+    nj:'',
     zhuanye_score:String(r[3]||'').trim()===''?'':Number(r[3])
   })).filter(r=>r.xh);
+}
+
+/** 解析导入年级：优先用表单「年级」字段；未填时取 Excel 首行识别到的年级列 */
+function resolveImportGrade(rows){
+  const g=document.getElementById('impGrade').value.trim();
+  if(g)return g;
+  if(Array.isArray(rows)){
+    const hit=rows.find(r=>r&&r.nj);
+    if(hit)return hit.nj;
+  }
+  return '';
 }
 
 function showRosterPreview(rows){
   const el=document.getElementById('impExcelPreview');
   if(!rows.length){el.innerHTML='<span class="bad">未识别到有效学生行（需至少包含「学号」列）</span>';return;}
-  let html='识别到 <b>'+rows.length+'</b> 名学生 · 列：学号 / 姓名 / 专业 / 班级 / 成绩（按表头或列序识别）';
-  html+='<div class="previewlist"><table><tr><th>学号</th><th>姓名</th><th>专业</th><th>班级</th><th>专业成绩</th></tr>';
+  let html='识别到 <b>'+rows.length+'</b> 名学生 · 列：学号 / 姓名 / 专业 / 班级 / 年级 / 成绩（按表头或列序识别）';
+  html+='<div class="previewlist"><table><tr><th>学号</th><th>姓名</th><th>专业</th><th>班级</th><th>年级</th><th>专业成绩</th></tr>';
   rows.slice(0,12).forEach(s=>{
-    html+='<tr><td>'+esc(s.xh)+'</td><td>'+esc(s.xm)+'</td><td>'+esc(s.zhuanye)+'</td><td>'+esc(s.bj)+'</td><td>'+(s.zhuanye_score===''?'':s.zhuanye_score)+'</td></tr>';
+    html+='<tr><td>'+esc(s.xh)+'</td><td>'+esc(s.xm)+'</td><td>'+esc(s.zhuanye)+'</td><td>'+esc(s.bj)+'</td><td>'+esc(s.nj)+'</td><td>'+(s.zhuanye_score===''?'':s.zhuanye_score)+'</td></tr>';
   });
-  if(rows.length>12)html+='<tr><td colspan="5">…共 '+rows.length+' 名</td></tr>';
+  if(rows.length>12)html+='<tr><td colspan="6">…共 '+rows.length+' 名</td></tr>';
   html+='</table></div>';
   el.innerHTML=html;
 }
@@ -1137,6 +1241,7 @@ document.getElementById('btnImportExcel').addEventListener('click',async()=>{
     teacher_account:teacher,
     class_name:cls,
     major:document.getElementById('impMajor').value.trim(),
+    grade:resolveImportGrade(pendingRosterRows),
     update_existing:document.getElementById('impUpdate').checked,
     rows:pendingRosterRows
   });
@@ -1195,11 +1300,12 @@ function stamp(){const d=new Date();const p=n=>String(n).padStart(2,'0');return 
 
 document.getElementById('btnExportCsv').addEventListener('click',()=>{
   if(!studentsData.length){toast('暂无学生数据','err');return;}
-  const head=['排名','学号','姓名','班级','状态','专业','德育(20%)','智育(50%)','体育(10%)','美育(10%)','劳育(10%)','扣分','综测总分'];
+  const head=['排名','学号','姓名','班级','状态','专业','年级','德育(20%)','智育(50%)','体育(10%)','美育(10%)','劳育(10%)','扣分','综测总分','年级专业排名'];
   const rows=studentsData.map(s=>[
-    s.rank==null?'—':s.rank,s.xh,s.xm,s.bj||'',s.status||'在读',s.zhuanye||'',
+    s.rank==null?'—':s.rank,s.xh,s.xm,s.bj||'',s.status||'在读',s.zhuanye||'',s.grade||'',
     s.deyuScore.toFixed(2),s.zhiyuScore.toFixed(2),s.tiyuScore.toFixed(2),
-    s.meiyuScore.toFixed(2),s.laoyuScore.toFixed(2),s.koufenScore.toFixed(2),s.zongceScore.toFixed(2)
+    s.meiyuScore.toFixed(2),s.laoyuScore.toFixed(2),s.koufenScore.toFixed(2),s.zongceScore.toFixed(2),
+    s.majorRank==null?'—':s.majorRank+'/'+s.majorTotal
   ]);
   const csv=[head].concat(rows).map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\r\n');
   // 加 BOM，Excel 打开中文不乱码
