@@ -33,10 +33,6 @@ input{font-family:inherit}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:22px 22px 20px}
 .fld{margin-bottom:14px}
 .fld .lab{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12.5px;color:var(--ink-2);margin-bottom:6px}
-.fld .lab .type{font-size:11.5px;padding:2px 9px;border-radius:20px;border:1px solid transparent;white-space:nowrap}
-.fld .lab .type.student{background:#e7f6ed;color:var(--good);border-color:#bfe3ce}
-.fld .lab .type.staff{background:var(--primary-bg);color:var(--primary);border-color:#cfe0f3}
-.fld .lab .type.unknown{background:#fdeceb;color:var(--bad);border-color:#f3c9c6}
 .input-wrap{position:relative;display:flex;align-items:center}
 .input-wrap input{width:100%;border:1px solid var(--line-strong);border-radius:10px;padding:12px 14px;font-size:15px;color:var(--ink);background:#fff;-webkit-appearance:none}
 .input-wrap input:focus{outline:0;border-color:var(--primary);box-shadow:0 0 0 3px rgba(31,95,168,.12)}
@@ -48,17 +44,6 @@ input{font-family:inherit}
 .btn:hover:not(:disabled){filter:brightness(1.06)}
 .btn:disabled{opacity:.6;cursor:not-allowed}
 .btn.ghost{background:#fff;color:var(--primary);border:1px solid var(--line-strong);margin-top:10px}
-
-.tips{margin-top:16px;background:var(--primary-bg);border:1px solid #cfe0f3;border-radius:10px;padding:10px 12px;font-size:12px;color:#1c4c86}
-.tips b{color:#16365f}
-.tips .tips-t{font-weight:700;color:#16365f;margin-bottom:6px}
-.tips .tips-f{margin-top:6px}
-table.route{width:100%;border-collapse:collapse;font-size:12px}
-table.route td{padding:4px 2px;vertical-align:top;border-top:1px solid #dbe8f6}
-table.route tr:first-child td{border-top:0}
-table.route .r-who{white-space:nowrap;font-weight:600;color:#16365f}
-table.route .r-page{font-family:ui-monospace,Consolas,monospace;color:var(--primary);white-space:nowrap}
-table.route .r-desc{color:#3a6d9e}
 
 /* 登录成功面板 */
 .done{text-align:center;padding:6px 0 0}
@@ -97,10 +82,7 @@ table.route .r-desc{color:#3a6d9e}
   <!-- 登录表单 -->
   <div class="card" id="formCard">
     <div class="fld">
-      <div class="lab">
-        <span>账号</span>
-        <span class="type hidden" id="typeTag"></span>
-      </div>
+      <div class="lab"><span>账号</span></div>
       <div class="input-wrap" id="wrapAccount">
         <input type="text" id="account" placeholder="请输入学号或工号" autocomplete="username" inputmode="text" autocapitalize="off" spellcheck="false">
       </div>
@@ -117,12 +99,6 @@ table.route .r-desc{color:#3a6d9e}
 
     <button class="btn" id="btnLogin">登 录</button>
     <button class="btn ghost" id="btnGuest">以访客身份浏览（免登录）</button>
-
-    <div class="tips">
-      <div class="tips-t">账号性质 → 目标页面</div>
-      <table class="route" id="routeTable"></table>
-      <div class="tips-f" id="tipsHint"></div>
-    </div>
   </div>
 
   <!-- 登录成功：按角色展示可用功能模块 -->
@@ -153,7 +129,6 @@ table.route .r-desc{color:#3a6d9e}
 const API = window.API_BASE || '';
 
 const el = id => document.getElementById(id);
-const TYPE_TEXT = { student: '学号 · 学生端', staff: '工号 · 教职工端', unknown: '格式不正确' };
 
 let toastTimer = null;
 function toast(msg, type) {
@@ -165,32 +140,21 @@ function toast(msg, type) {
 }
 
 /* ---------- 表单校验 ---------- */
-/** 输入时只做实时身份识别提示，不打断输入 */
-function updateTypeHint() {
-  const account = el('account').value.trim();
-  const type = ZCAuth.detectAccountType(account);
-  const tag = el('typeTag');
-  tag.classList.toggle('hidden', !account);
-  tag.className = 'type ' + (account ? type : '');
-  tag.textContent = account ? TYPE_TEXT[type] || '' : '';
-  el('wrapAccount').classList.toggle('invalid', !!account && type === 'unknown');
-  return type;
-}
-
-/** 提交 / 失焦时的完整校验，返回错误信息（空串表示通过） */
+/**
+ * 提交 / 失焦时的完整校验，返回错误信息（空串表示通过）。
+ * 账号是学号还是工号由服务端判定：工号也可能是纯数字，前端不按字符构成猜测，避免误判。
+ */
 function validate() {
   const account = el('account').value.trim();
   const password = el('password').value;
-  const type = updateTypeHint();
 
   let msg = '';
   if (!account) msg = '请输入学号或工号';
-  else if (type === 'unknown') msg = '账号格式不正确：' + ZCAuth.ACCOUNT_HINT;
   else if (!password) msg = '请输入密码';
   else if (password.length < 6) msg = '密码至少 6 位';
 
   el('errMsg').textContent = msg;
-  el('wrapAccount').classList.toggle('invalid', !!account && type === 'unknown');
+  el('wrapAccount').classList.toggle('invalid', !account);
   el('wrapPassword').classList.toggle('invalid', msg === '请输入密码' || msg === '密码至少 6 位');
   return msg;
 }
@@ -218,7 +182,7 @@ async function doLogin() {
       toast(result ? result.msg : '登录失败，请稍后重试', 'err');
       return;
     }
-    // 身份以服务端返回的 role 为准，前端识别的账号类型仅用于提示
+    // 身份完全以服务端返回的 role 为准，前端不猜测账号类型
     ZCAuth.saveSession(result.data);
     showDone(result.data);
   } catch (e) {
@@ -270,7 +234,6 @@ function esc(x) {
 }
 
 /* ---------- 事件 ---------- */
-el('account').addEventListener('input', updateTypeHint);
 el('account').addEventListener('blur', validate);
 el('password').addEventListener('input', () => { if (el('errMsg').textContent) validate(); });
 el('password').addEventListener('blur', () => { if (el('password').value) validate(); });
@@ -285,13 +248,6 @@ el('btnEye').addEventListener('click', () => {
   p.type = show ? 'text' : 'password';
   el('btnEye').textContent = show ? '隐藏' : '显示';
 });
-
-el('tipsHint').textContent = ZCAuth.ACCOUNT_HINT + '；忘记密码请联系辅导员或管理员重置。';
-
-// 渲染「账号性质 → 目标页面」映射表（数据源：auth.js 的 ROLE_ROUTES）
-el('routeTable').innerHTML = ZCAuth.ROLE_ROUTES.map(r =>
-  '<tr><td class="r-who">' + esc(r.label) + '</td><td class="r-page">' + esc(r.page) + '</td><td class="r-desc">' + esc(r.desc) + '</td></tr>'
-).join('');
 
 // 已登录则直接回对应角色的专属页面
 (function () {
