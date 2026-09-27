@@ -132,11 +132,15 @@ table.main tbody tr:hover{background:#f7fafd}
 .login-wrap input{width:100%;border:1px solid var(--line-strong);border-radius:8px;padding:10px 12px;font-size:14px}
 .login-wrap input:focus{outline:0;border-color:var(--primary);box-shadow:0 0 0 3px rgba(31,95,168,.12)}
 
-.proof-item{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:12px}
-.proof-item:last-child{border-bottom:0}
-.proof-item .pf-key{color:var(--ink-2);min-width:100px}
-.proof-item .pf-name{flex:1;color:var(--primary)}
-.proof-item .pf-view{color:var(--primary);cursor:pointer;text-decoration:underline}
+.proof-grid{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px}
+.proof-card{width:150px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
+.proof-card a{display:block;background:#eef3f9;text-decoration:none}
+.proof-card img{display:block;width:100%;height:110px;object-fit:contain;background:#eef3f9}
+.proof-card img.fail{height:auto;min-height:110px;padding:20px 8px;box-sizing:border-box;font-size:11.5px;color:var(--ink-3);text-align:center}
+.proof-card .pc-doc{display:flex;align-items:center;justify-content:center;height:110px;color:var(--primary);font-size:12px;text-align:center;line-height:1.5}
+.proof-card .pc-meta{padding:6px 8px;font-size:11.5px;line-height:1.5;color:var(--ink-2)}
+.proof-card .pc-key{display:block;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.proof-card .pc-name{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 .reject-input{width:100%;min-height:80px;border:1px solid var(--line-strong);border-radius:8px;padding:8px 10px;font-size:13px;resize:vertical;margin-top:8px}
 
@@ -157,6 +161,7 @@ table.main tbody tr:hover{background:#f7fafd}
   .stats{grid-template-columns:repeat(2,1fr)}
   .dialog .body{padding:14px}
   .app-row{grid-template-columns:1fr 1fr;font-size:12px}
+  .proof-card{width:calc(50% - 6px)}
 }
 .toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(20px);background:#1f2d3d;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;opacity:0;pointer-events:none;transition:all .25s;z-index:200;max-width:86vw;box-shadow:0 6px 24px rgba(0,0,0,.25)}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
@@ -681,12 +686,21 @@ function renderReview(data){
 
   const proofs=data.proofs||[];
   if(proofs.length){
-    html+='<div style="margin-top:12px;padding:10px 14px;background:#f8fafc;border:1px dashed var(--line-strong);border-radius:10px">';
+    html+='<div style="margin-top:12px;padding:12px 14px;background:#f8fafc;border:1px dashed var(--line-strong);border-radius:10px">';
     html+='<b style="font-size:13px">证明材料（'+proofs.length+' 份）</b>';
+    html+='<div class="proof-grid">';
     proofs.forEach(p=>{
-      html+=`<div class="proof-item"><span class="pf-key">${esc(PROOF_LABEL[p.item_key]||p.item_key)}</span><span class="pf-name">${esc(p.file_name)}</span><a class="pf-view" href="${API}/api/files/${encodeURIComponent(p.file_path)}" target="_blank">查看</a></div>`;
+      const url=API+'/api/files/'+encodeURIComponent(p.file_path);
+      const label=esc(PROOF_LABEL[p.item_key]||p.item_key);
+      const name=esc(p.file_name);
+      const isImg=/^image\//i.test(p.file_type||'')||/\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(p.file_name||'');
+      // 图片直接在卡片内展示缩略图（点击可看原图）；PDF 等非图片给出占位与打开入口
+      const media=isImg
+        ? `<img src="${url}" alt="${name}" loading="lazy" onerror="this.className='fail';this.alt='图片加载失败'">`
+        : '<div class="pc-doc">PDF / 文件<br>点击查看</div>';
+      html+=`<div class="proof-card"><a href="${url}" target="_blank" title="查看原图">${media}</a><div class="pc-meta"><span class="pc-key">${label}</span><span class="pc-name">${name}</span></div></div>`;
     });
-    html+='</div>';
+    html+='</div></div>';
   }
 
   if(data.status==='rejected'&&data.reject_reason){
