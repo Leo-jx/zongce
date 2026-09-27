@@ -32,7 +32,8 @@ const NUM_FIELDS = [
 ];
 
 /** 学生基本信息字段 */
-const INFO_FIELDS = ['xm', 'zhuanye', 'bj'];
+const INFO_FIELDS = ['xm', 'zhuanye', 'bj', 'status'];
+const STUDENT_STATUS_ALLOWED = ['在读', '休学', '退学', '转学', '保留学籍', '毕业'];
 
 /** 以 JSON 数组形式存储的字段 */
 const JSON_FIELDS = ['deyu_ganbu', 'deyu_rongyu', 'zhiyu_jineng'];
@@ -272,6 +273,29 @@ export async function handleTeacher(path, method, ctx) {
       [d.xh, d.xm, d.zhuanye || '', className, teacherAccount, classId, Number(d.zhuanye_score) || 80]
     );
     return ok({ id: r.insertId }, env);
+  }
+
+  // 批量操作：多选学生删除 / 修改学籍状态（同一条路径，按 action 区分）
+  if (path === STUDENTS_PATH + '/batch' && method === 'POST') {
+    const denied = requirePerm(ctx, 'student:write'); if (denied) return denied;
+    const d = await request.json();
+    const ids = Array.isArray(d.ids) ? d.ids.map(Number).filter(n => !isNaN(n)) : [];
+    if (!ids.length) return fail('请先选择学生', 400, env);
+    if (d.action !== 'delete' && !STUDENT_STATUS_ALLOWED.includes(d.status)) {
+      return fail('无效的学生状态', 400, env);
+    }
+    let deleted = 0, updated = 0;
+    for (const id of ids) {
+      const stu = await db.queryOne('SELECT * FROM students WHERE id = ?', [id]);
+      if (!stu) continue;
+      if (ctx.user.role !== 'admin' && stu.fdy !== ctx.user.account) continue;
+      if (d.action === 'delete') {
+        await purgeStudent(db, stu.id); deleted++;
+      } else {
+        await db.update('UPDATE students SET status = ? WHERE id = ?', [d.status, stu.id]); updated++;
+      }
+    }
+    return ok({ deleted, updated }, env);
   }
 
   const sm = path.match(STUDENT_RE);

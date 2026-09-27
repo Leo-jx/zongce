@@ -62,7 +62,8 @@ CREATE TABLE students (
   laoyu_shehui REAL DEFAULT 0,
   laoyu_custom REAL DEFAULT 0,
   koufen_chufen REAL DEFAULT 0,
-  koufen_richang REAL DEFAULT 0
+  koufen_richang REAL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT '在读'  -- 学籍状态：在读 / 休学 / 退学 / 转学 / 保留学籍 / 毕业
 );
 
 CREATE INDEX IF NOT EXISTS idx_students_class ON students(class_id);

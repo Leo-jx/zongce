@@ -195,6 +195,21 @@ table.grid tbody tr:hover{background:#f7fafd}
 .plansum-title{font-size:12.5px;color:var(--ink-2);margin:10px 0 6px}
 .linkbtn{background:none;border:0;color:var(--primary);font-size:12px;cursor:pointer;padding:0;text-decoration:underline}
 .fmtcode{margin-top:10px;padding:10px 12px;background:#f7fafd;border:1px solid var(--line);border-radius:8px;font-size:11.5px;line-height:1.9;color:var(--ink-2);white-space:pre-wrap;font-family:Consolas,Menlo,monospace}
+/* 学生学籍状态 / 多选批量操作 */
+.st-badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap}
+.st-badge.ok{background:#d4edda;color:#155724}
+.st-badge.warn{background:#fff3cd;color:#856404}
+.st-badge.bad{background:#f8d7da;color:#721c24}
+.st-badge.muted{background:#eceef1;color:#6b7280}
+.inactive-row{opacity:.55}
+.batch-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.sel-count{font-size:12.5px;color:var(--ink-3)}
+.btn.danger{background:#fff;color:#c0392b;border:1px solid #f0c4c0}
+.btn.danger:hover{background:#fdecea}
+.seg{display:inline-flex;gap:6px;align-items:center}
+.col-chk{width:36px}
+.col-status{width:80px}
+.col-chk input{width:16px;height:16px}
 </style>
 </head>
 <body>
@@ -266,6 +281,23 @@ table.grid tbody tr:hover{background:#f7fafd}
 
   <div id="tab-scores" class="hidden">
     <div class="toolbar">
+      <div class="batch-bar left">
+        <span class="sel-count" id="selCount">已选 0 项</span>
+        <button class="btn danger" id="btnBatchDelete">删除选中</button>
+        <span class="seg">
+          <select id="batchStatus" class="imp-input">
+            <option value="">修改状态为…</option>
+            <option value="在读">在读</option>
+            <option value="休学">休学</option>
+            <option value="退学">退学</option>
+            <option value="转学">转学</option>
+            <option value="保留学籍">保留学籍</option>
+            <option value="毕业">毕业</option>
+          </select>
+          <button class="btn" id="btnBatchStatus">应用</button>
+        </span>
+        <span class="hint">休学 / 退学等状态的学生不参与本学年排名与统计</span>
+      </div>
       <div class="right">
         <button class="btn" id="btnGoImportScore">导入成绩</button>
         <button class="btn" id="btnBackup">导出数据备份</button>
@@ -281,13 +313,14 @@ table.grid tbody tr:hover{background:#f7fafd}
       <div class="tablewrap">
         <table class="main">
           <colgroup>
-            <col class="col-rank"><col class="col-xh"><col class="col-xm">
+            <col class="col-chk"><col class="col-rank"><col class="col-xh"><col class="col-xm"><col class="col-status">
             <col class="col-mod"><col class="col-mod"><col class="col-mod"><col class="col-mod"><col class="col-mod"><col class="col-mod">
             <col class="col-total"><col class="col-op">
           </colgroup>
           <thead>
             <tr>
-              <th>排名</th><th>学号</th><th>姓名</th>
+              <th class="col-chk"><input type="checkbox" id="chkAll" title="全选"></th>
+              <th>排名</th><th>学号</th><th>姓名</th><th>状态</th>
               <th>德<br>（20%）</th><th>智<br>（50%）</th><th>体<br>（10%）</th><th>美<br>（10%）</th><th>劳<br>（10%）</th><th>扣分</th>
               <th>综测分数</th><th>操作</th>
             </tr>
@@ -483,6 +516,11 @@ const OPTS = {
   chufen: [{v:0,t:'无'},{v:30,t:'公安查处/违法违纪等 -30'},{v:20,t:'留校察看 -20'},{v:15,t:'记过 -15'},{v:10,t:'严重警告 -10'},{v:7,t:'警告 -7'},{v:5,t:'全校通报批评 -5'},{v:2,t:'学院通报批评 -2'}]
 };
 const CAP = 20;
+const STATUS_OPTIONS = ['在读','休学','退学','转学','保留学籍','毕业'];
+function statusBadge(st){
+  const m={'在读':'ok','休学':'warn','退学':'bad','转学':'bad','保留学籍':'warn','毕业':'muted'};
+  return `<span class="st-badge ${m[st]||'muted'}">${esc(st||'在读')}</span>`;
+}
 const PROOF_LABEL = {
   'd-sixiang':'思想进步','d-biaozhang':'见义勇为等表彰','d-ganbu':'团学干部任职','d-rongyu':'荣誉表彰',
   'z-jingsai':'学科技能竞赛','z-jineng':'职业技能证书','z-chuangye':'创新创业',
@@ -498,7 +536,7 @@ function calcTiyu(s){const t=s.tiyu;let jl=(Number(t.jiangli)||0)+(Number(t.cust
 function calcMeiyu(s){const m=s.meiyu;let jl=(Number(m.jiangli)||0)+(Number(m.custom)||0);jl=cap(jl);return Math.min(80+jl,100);}
 function calcLaoyu(s){const l=s.laoyu;const zhiyuan=Math.min(Number(l.zhiyuanCishu)||0,10);const xianxue=(Number(l.xianxue)||0)*5;let jl=zhiyuan+xianxue+(Number(l.qinshi)||0)+(Number(l.shehui)||0)+(Number(l.custom)||0);jl=cap(jl);return Math.min(80+jl,100);}
 function calcKoufen(s){const k=s.koufen;return -((Number(k.chufen)||0)+(Number(k.richang)||0));}
-function calcZongce(s){const de=calcDeyu(s),zhi=calcZhiyu(s),ti=calcTiyu(s),mei=calcMeiyu(s),lao=calcLaoyu(s);return de*0.20+zhi*0.50+ti*0.10+mei*0.10+lao*0.10+calcKoufen(s);}
+function calcZongce(s){const de=calcDeyu(s),zhi=calcZhiyu(s),ti=calcTiyu(s),mei=calcMeiyu(s),lao=calcLaoyu(s);return Math.max(0,de*0.20+zhi*0.50+ti*0.10+mei*0.10+lao*0.10+calcKoufen(s));}
 function esc(x){return String(x||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
 let toastTimer=null;
@@ -692,6 +730,7 @@ function toArr(v){try{const p=typeof v==='string'?JSON.parse(v||'[]'):v;return A
 function toStudent(row){
   return {...row,
     id:row.id!=null?row.id:row.xh,
+    status:(row.status||'在读'),
     deyu:{sixiang:toNum(row.deyu_sixiang),biaozhang:toNum(row.deyu_biaozhang),ganbu:toArr(row.deyu_ganbu),rongyu:toArr(row.deyu_rongyu),custom:toNum(row.deyu_custom)},
     zhiyu:{zhuanye:toNum(row.zhuanye_score),jingsai:toNum(row.zhiyu_jingsai),jineng:toArr(row.zhiyu_jineng),chuangye:toNum(row.zhiyu_chuangye),custom:toNum(row.zhiyu_custom)},
     tiyu:{chengji:toNum(row.tiyu_chengji),tice:toNum(row.tiyu_tice),jiangli:toNum(row.tiyu_jiangli),custom:toNum(row.tiyu_custom)},
@@ -717,11 +756,17 @@ async function loadStudents(){
   try{
     const result=await apiGet('/api/teacher/students');
     if(result.code!==0){toast(result.msg||'加载学生失败','err');return;}
-    studentsData=(result.data||[]).map(toStudent).map(s=>{
+    const raw=(result.data||[]).map(toStudent).map(s=>{
       const de=calcDeyu(s),zhi=calcZhiyu(s),ti=calcTiyu(s),mei=calcMeiyu(s),lao=calcLaoyu(s),ko=calcKoufen(s);
-      return {...s, deyuScore:de, zhiyuScore:zhi, tiyuScore:ti, meiyuScore:mei, laoyuScore:lao, koufenScore:ko, zongceScore:de*0.20+zhi*0.50+ti*0.10+mei*0.10+lao*0.10+ko};
-    }).sort((a,b)=>b.zongceScore-a.zongceScore);
-    studentsData.forEach((s,i)=>s.rank=i+1);
+      const total=de*0.20+zhi*0.50+ti*0.10+mei*0.10+lao*0.10+ko;
+      return {...s, deyuScore:de, zhiyuScore:zhi, tiyuScore:ti, meiyuScore:mei, laoyuScore:lao, koufenScore:ko, zongceScore:Math.max(0,Math.round(total*100)/100)};
+    });
+    // 排名与统计仅针对「在读」学生（休学 / 退学等不参与本学年测评）
+    const active=raw.filter(s=>s.status==='在读').sort((a,b)=>b.zongceScore-a.zongceScore);
+    active.forEach((s,i)=>s.rank=i+1);
+    const inactive=raw.filter(s=>s.status!=='在读').sort((a,b)=>b.zongceScore-a.zongceScore);
+    inactive.forEach(s=>s.rank=null);
+    studentsData=active.concat(inactive);
     renderScoreTable();
   }catch(e){toast('学生数据加载失败：'+((e&&e.message)||e),'err');}
 }
@@ -731,17 +776,20 @@ function renderScoreTable(){
   const empty=document.getElementById('scoreEmpty');
   const n=studentsData.length;
   document.getElementById('stCount').textContent=n;
+  const active=studentsData.filter(s=>s.status==='在读');
   if(!n){tbody.innerHTML='';empty.style.display='block';document.getElementById('stAvg').textContent='–';document.getElementById('stTop').textContent='–';return;}
   empty.style.display='none';
-  const total=studentsData.reduce((a,s)=>a+s.zongceScore,0);
-  const tops=studentsData.map(s=>s.zongceScore).sort((a,b)=>b-a);
-  document.getElementById('stAvg').textContent=(total/n).toFixed(2);
-  document.getElementById('stTop').textContent=tops[0].toFixed(2);
+  const total=active.reduce((a,s)=>a+s.zongceScore,0);
+  const tops=active.map(s=>s.zongceScore).sort((a,b)=>b-a);
+  document.getElementById('stAvg').textContent=active.length?(total/active.length).toFixed(2):'–';
+  document.getElementById('stTop').textContent=tops.length?tops[0].toFixed(2):'–';
 
   tbody.innerHTML=studentsData.map(s=>{
     const ko=s.koufenScore;
-    return `<tr>
-      <td>${s.rank}</td><td>${esc(s.xh)}</td><td>${esc(s.xm)}</td>
+    return `<tr class="${s.status!=='在读'?'inactive-row':''}">
+      <td class="col-chk"><input type="checkbox" class="rowchk" data-id="${s.id}"></td>
+      <td>${s.rank==null?'—':s.rank}</td><td>${esc(s.xh)}</td><td>${esc(s.xm)}</td>
+      <td>${statusBadge(s.status)}</td>
       <td class="mod-de"><span class="mod-score">${s.deyuScore.toFixed(1)}</span></td>
       <td class="mod-zhi"><span class="mod-score">${s.zhiyuScore.toFixed(1)}</span></td>
       <td class="mod-ti"><span class="mod-score">${s.tiyuScore.toFixed(1)}</span></td>
@@ -752,16 +800,56 @@ function renderScoreTable(){
       <td><button class="tag-edit" data-sid="${s.id}">编辑</button></td>
     </tr>`;
   }).join('');
+  updateSelCount();
+}
+function getSelectedIds(){return Array.from(document.querySelectorAll('.rowchk:checked')).map(c=>Number(c.dataset.id));}
+function updateSelCount(){
+  const sel=getSelectedIds();
+  const el=document.getElementById('selCount');
+  if(el)el.textContent='已选 '+sel.length+' 项';
+  const a=document.getElementById('chkAll');
+  if(a)a.checked=sel.length>0&&sel.length===studentsData.length;
 }
 
 document.getElementById('scoreTbody').addEventListener('click',e=>{
   const btn=e.target.closest('[data-sid]');
   if(btn)openEdit(Number(btn.dataset.sid));
 });
+document.getElementById('scoreTbody').addEventListener('change',e=>{if(e.target.classList.contains('rowchk'))updateSelCount();});
+document.getElementById('chkAll').addEventListener('change',e=>{
+  document.querySelectorAll('.rowchk').forEach(c=>c.checked=e.target.checked);
+  updateSelCount();
+});
+
+document.getElementById('btnBatchDelete').addEventListener('click',async()=>{
+  const ids=getSelectedIds();
+  if(!ids.length){toast('请先勾选要删除的学生','err');return;}
+  if(!confirm('确认删除选中的 '+ids.length+' 名学生？\n将同时删除其登录账号、加分申请与考勤记录，且不可恢复。'))return;
+  const r=await apiPost('/api/teacher/students/batch',{action:'delete',ids});
+  if(r.code!==0){toast(r.msg||'删除失败','err');return;}
+  toast('已删除 '+r.data.deleted+' 名学生','ok');
+  loadStudents();loadMyClasses();
+});
+document.getElementById('btnBatchStatus').addEventListener('click',async()=>{
+  const st=document.getElementById('batchStatus').value;
+  if(!st){toast('请先选择目标状态','err');return;}
+  const ids=getSelectedIds();
+  if(!ids.length){toast('请先勾选学生','err');return;}
+  if(!confirm('确认将选中的 '+ids.length+' 名学生学籍状态改为「'+st+'」？'))return;
+  const r=await apiPost('/api/teacher/students/batch',{status:st,ids});
+  if(r.code!==0){toast(r.msg||'操作失败','err');return;}
+  toast('已更新 '+r.data.updated+' 名学生状态为「'+st+'」','ok');
+  loadStudents();
+});
 
 function buildSelect(opts,val,multi){
   if(multi){const sel=document.createElement('select');sel.multiple=true;sel.size=Math.min(opts.length,6);sel.style.minHeight='96px';opts.forEach(o=>{const op=document.createElement('option');op.value=o.v;op.textContent=o.t;if((val||[]).includes(o.v))op.selected=true;sel.appendChild(op);});return sel;}
   const sel=document.createElement('select');opts.forEach(o=>{const op=document.createElement('option');op.value=o.v;op.textContent=o.t;if(Number(val)===o.v)op.selected=true;sel.appendChild(op);});return sel;
+}
+function buildStatusSelect(val){
+  const sel=document.createElement('select');
+  STATUS_OPTIONS.forEach(o=>{const op=document.createElement('option');op.value=o;op.textContent=o;if(o===val)op.selected=true;sel.appendChild(op);});
+  return sel;
 }
 function numInput(val,min,max,step){const i=document.createElement('input');i.type='number';i.value=(val===undefined||val===null)?'':val;if(min!==undefined)i.min=min;if(max!==undefined)i.max=max;i.step=step!==undefined?step:1;return i;}
 function fieldRow(label,control,hint){const row=document.createElement('div');row.className='frow';const l=document.createElement('div');l.className='fl';l.textContent=label;row.appendChild(l);row.appendChild(control);if(hint){const h=document.createElement('div');h.className='hint';h.textContent=hint;row.appendChild(h);}return row;}
@@ -774,6 +862,17 @@ function openEdit(sid){
   document.getElementById('edStudentInfo').textContent=s.xh+' · '+s.xm;
   const grid=document.getElementById('modGrid');
   grid.innerHTML='';
+
+  // 学籍状态（休学 / 退学等不参与本学年排名）
+  const wrapSt=document.createElement('div');
+  const stSel=buildStatusSelect(s.status);stSel.id='edStatus';
+  wrapSt.appendChild(fieldRow('学籍状态',stSel,'休学 / 退学 / 转学 / 保留学籍 / 毕业 的学生不参与本学年排名与统计'));
+  stSel.addEventListener('change',async()=>{
+    const r=await apiPut('/api/teacher/students/'+encodeURIComponent(s.xh),{status:stSel.value});
+    if(r.code===0){s.status=stSel.value;toast('状态已更新为「'+stSel.value+'」','ok');renderScoreTable();}
+    else{toast(r.msg||'状态更新失败','err');stSel.value=s.status;}
+  });
+  grid.appendChild(modCard('mod-st','学籍状态',wrapSt));
 
   const wrap1=document.createElement('div');
   const si=buildSelect(OPTS.sixiang,s.deyu.sixiang);si.dataset.k='deyu.sixiang';wrap1.appendChild(fieldRow('思想进步',si,'积极分子+1 / 预备党员+2 / 党员+3，取一项'));
@@ -979,9 +1078,9 @@ function stamp(){const d=new Date();const p=n=>String(n).padStart(2,'0');return 
 
 document.getElementById('btnExportCsv').addEventListener('click',()=>{
   if(!studentsData.length){toast('暂无学生数据','err');return;}
-  const head=['排名','学号','姓名','班级','专业','德育(20%)','智育(50%)','体育(10%)','美育(10%)','劳育(10%)','扣分','综测总分'];
+  const head=['排名','学号','姓名','班级','状态','专业','德育(20%)','智育(50%)','体育(10%)','美育(10%)','劳育(10%)','扣分','综测总分'];
   const rows=studentsData.map(s=>[
-    s.rank,s.xh,s.xm,s.bj||'',s.zhuanye||'',
+    s.rank==null?'—':s.rank,s.xh,s.xm,s.bj||'',s.status||'在读',s.zhuanye||'',
     s.deyuScore.toFixed(2),s.zhiyuScore.toFixed(2),s.tiyuScore.toFixed(2),
     s.meiyuScore.toFixed(2),s.laoyuScore.toFixed(2),s.koufenScore.toFixed(2),s.zongceScore.toFixed(2)
   ]);
@@ -994,7 +1093,7 @@ document.getElementById('btnExportCsv').addEventListener('click',()=>{
 document.getElementById('btnBackup').addEventListener('click',()=>{
   if(!studentsData.length){toast('暂无学生数据','err');return;}
   const data=studentsData.map(s=>({
-    xh:s.xh,xm:s.xm,zhuanye:s.zhuanye,bj:s.bj,zhuanye_score:s.zhuanye_score,
+    xh:s.xh,xm:s.xm,zhuanye:s.zhuanye,bj:s.bj,status:s.status||'在读',zhuanye_score:s.zhuanye_score,
     deyu:{sixiang:s.deyu_sixiang,biaozhang:s.deyu_biaozhang,ganbu:safeArr(s.deyu_ganbu),rongyu:safeArr(s.deyu_rongyu),custom:s.deyu_custom},
     zhiyu:{jingsai:s.zhiyu_jingsai,jineng:safeArr(s.zhiyu_jineng),chuangye:s.zhiyu_chuangye,custom:s.zhiyu_custom},
     tiyu:{chengji:s.tiyu_chengji,tice:s.tiyu_tice,jiangli:s.tiyu_jiangli,custom:s.tiyu_custom},
