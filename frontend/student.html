@@ -407,7 +407,7 @@ async function submitApplication(){
         'Content-Type': 'application/json',
         'Authorization': 'Bearer '+TOKEN
       },
-      body: JSON.stringify(d)
+      body: JSON.stringify({ ...d, proof_ids: Object.values(PROOF_ID_MAP) })
     });
     const result = await resp.json();
     if(result.code !== 0){

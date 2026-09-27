@@ -45,6 +45,20 @@ export async function handleStudent(path, method, ctx) {
         scores.tiyuReward, scores.meiyuReward, scores.laoyuReward, scores.koufenVal]
     );
 
+    // 把本次上传的证明材料关联到新申请：学生端在「选择文件」时即上传，此时还没有申请记录，
+    // 故 proofs.application_id 暂为 NULL；提交申请后再回填，教师端才能按 application_id 查到并查看。
+    // 仅允许关联尚未归属其它申请的记录（application_id IS NULL），避免串改他人已关联的素材。
+    const proofIds = Array.isArray(detail.proof_ids)
+      ? detail.proof_ids.map(Number).filter(n => Number.isInteger(n) && n > 0)
+      : [];
+    if (proofIds.length) {
+      const placeholders = proofIds.map(() => '?').join(',');
+      await db.run(
+        `UPDATE proofs SET application_id = ? WHERE id IN (${placeholders}) AND application_id IS NULL`,
+        [app.insertId, ...proofIds]
+      );
+    }
+
     return ok({ id: app.insertId }, env);
   }
 
