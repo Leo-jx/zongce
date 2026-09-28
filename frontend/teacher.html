@@ -591,7 +591,8 @@ const PROOF_LABEL = {
 
 function sum(vals){return vals.reduce((a,b)=>a+(Number(b)||0),0);}
 function cap(v){return Math.min(Math.max(v||0,0),CAP);}
-function calcDeyu(s){const d=s.deyu;let jl=(Number(d.sixiang)||0)+(Number(d.biaozhang)||0)+Math.min(sum(d.ganbu),10)+Math.min(sum(d.rongyu),10)+(Number(d.custom)||0);jl=cap(jl);return Math.min(80+jl,100);}
+// 德育 = 基础 80 + 奖励分（干部 / 荣誉各封顶 10，奖励合计封顶 20），因此上限 100
+function calcDeyu(s){const d=s.deyu;const reward=Math.min(cap((Number(d.sixiang)||0)+(Number(d.biaozhang)||0)+Math.min(sum(d.ganbu),10)+Math.min(sum(d.rongyu),10)+(Number(d.custom)||0)),20);return 80+reward;}
 function calcZhiyu(s){const z=s.zhiyu;let jl=(Number(z.jingsai)||0)+Math.min(sum(z.jineng),20)+(Number(z.chuangye)||0)+(Number(z.custom)||0);jl=cap(jl);return Math.min((Number(z.zhuanye)||0)+jl,100);}
 function calcTiyu(s){const t=s.tiyu;let jl=(Number(t.jiangli)||0)+(Number(t.custom)||0);jl=cap(jl);return Math.min((Number(t.chengji)||0)+(Number(t.tice)||0)+jl,100);}
 function calcMeiyu(s){const m=s.meiyu;let jl=(Number(m.jiangli)||0)+(Number(m.custom)||0);jl=cap(jl);return Math.min(80+jl,100);}

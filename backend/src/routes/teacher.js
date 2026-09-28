@@ -653,6 +653,16 @@ async function purgeStudent(db, studentId) {
   if (stu && stu.xh) await db.run('DELETE FROM users WHERE account = ? AND role = ?', [stu.xh, 'student']);
 }
 
+/** 解析以 JSON 数组存储的字段，异常时回落为空数组 */
+function jsonArray(raw) {
+  try {
+    const arr = JSON.parse(raw || '[]');
+    return Array.isArray(arr) ? arr : [];
+  } catch (e) {
+    return [];
+  }
+}
+
 /** 审核通过后把奖励分累加进学生成绩表 */
 async function applyScores(db, app) {
   const item = await db.queryOne('SELECT * FROM application_items WHERE application_id = ?', [app.id]);
@@ -663,6 +673,27 @@ async function applyScores(db, app) {
 
   const sets = [];
   const params = [];
+
+  // 德育：按申报明细拆成「思想进步 / 表彰 / 干部任职 / 荣誉表彰」分项累加。
+  // 不可直接累加 application_items.deyu_score（那是奖励分，且若误存为总分会导致 80 分基础分被重复计入）。
+  const detail = (() => { try { return JSON.parse(item.detail || '{}'); } catch (e) { return {}; } })();
+  const d = detail.deyu || {};
+  const sixiang = Number(d.sixiang) || 0;
+  const biaozhang = Number(d.biaozhang) || 0;
+  const ganbu = Array.isArray(d.ganbu) ? d.ganbu : [];
+  const rongyu = Array.isArray(d.rongyu) ? d.rongyu : [];
+  if (sixiang) { sets.push('deyu_sixiang = ?'); params.push((Number(stu.deyu_sixiang) || 0) + sixiang); }
+  if (biaozhang) { sets.push('deyu_biaozhang = ?'); params.push((Number(stu.deyu_biaozhang) || 0) + biaozhang); }
+  if (ganbu.length) {
+    sets.push('deyu_ganbu = ?');
+    params.push(JSON.stringify(jsonArray(stu.deyu_ganbu).concat(ganbu)));
+  }
+  if (rongyu.length) {
+    sets.push('deyu_rongyu = ?');
+    params.push(JSON.stringify(jsonArray(stu.deyu_rongyu).concat(rongyu)));
+  }
+
+  // 其余维度：奖励分增量累加
   for (const { item: key, column } of SCORE_FIELDS) {
     const value = Number(item[key]) || 0;
     if (value > 0) { sets.push(column + ' = ?'); params.push((Number(stu[column]) || 0) + value); }

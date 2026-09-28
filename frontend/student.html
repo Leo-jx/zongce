@@ -371,8 +371,11 @@ function loadDraft(){
 
 function refreshPreview(){
   const d = collect();
+  // 与服务端 / 教师端口径一致：干部、荣誉两类各封顶 10，奖励合计封顶 20
   const deyu = Math.min(
-    (d.deyu.sixiang + d.deyu.biaozhang + d.deyu.ganbu.reduce((a,b)=>a+(+b||0),0) + d.deyu.rongyu.reduce((a,b)=>a+(+b||0),0)), 20);
+    (+d.deyu.sixiang || 0) + (+d.deyu.biaozhang || 0)
+    + Math.min(d.deyu.ganbu.reduce((a,b)=>a+(+b||0),0), 10)
+    + Math.min(d.deyu.rongyu.reduce((a,b)=>a+(+b||0),0), 10), 20);
   const zhiyu = Math.min(
     d.zhiyu.jingsai + d.zhiyu.jineng.reduce((a,b)=>a+(+b||0),0) + d.zhiyu.chuangye, 20);
   const tiyu = Math.min(d.tiyu.jiangli, 20);

@@ -41,7 +41,7 @@ export async function handleStudent(path, method, ctx) {
       `INSERT INTO application_items
         (application_id, detail, deyu_score, zhiyu_reward, tiyu_reward, meiyu_reward, laoyu_reward, koufen)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [app.insertId, JSON.stringify(detail), scores.deyuScore, scores.zhiyuReward,
+      [app.insertId, JSON.stringify(detail), scores.deyuReward, scores.zhiyuReward,
         scores.tiyuReward, scores.meiyuReward, scores.laoyuReward, scores.koufenVal]
     );
 
