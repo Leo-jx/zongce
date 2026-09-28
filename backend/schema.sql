@@ -2,6 +2,7 @@
 -- 已部署过的库请改用 backend/migrations/ 下的增量脚本。
 
 DROP TABLE IF EXISTS attendance;
+DROP TABLE IF EXISTS teaching_plans;
 DROP TABLE IF EXISTS user_permissions;
 DROP TABLE IF EXISTS role_permissions;
 DROP TABLE IF EXISTS classes;
@@ -116,6 +117,23 @@ CREATE TABLE attendance (
 );
 
 CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance(date);
+
+-- 教学计划库（全院辅导员共用）：按「年级 + 专业 + 学年」聚合，同一学年的多个学期合并为一条
+CREATE TABLE teaching_plans (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  grade TEXT NOT NULL DEFAULT '',          -- 年级，如 2023
+  major TEXT NOT NULL DEFAULT '',          -- 专业，如 软件技术
+  academic_year TEXT NOT NULL DEFAULT '',  -- 学年，如 2023-2024
+  terms TEXT NOT NULL DEFAULT '[]',        -- 覆盖的学期 JSON 数组
+  courses TEXT NOT NULL DEFAULT '[]',      -- 课程 JSON 数组 [{name,credit,prop}]
+  n_req INTEGER NOT NULL DEFAULT 0,        -- 必修课程数
+  n_sel INTEGER NOT NULL DEFAULT 0,        -- 限选课程数
+  source_files TEXT NOT NULL DEFAULT '',   -- 来源文件名，顿号分隔
+  created_by TEXT NOT NULL DEFAULT '',     -- 上传人
+  updated_at TEXT DEFAULT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_plans_key ON teaching_plans (grade, major, academic_year);
+CREATE INDEX IF NOT EXISTS idx_plans_major ON teaching_plans (major);
 
 -- 角色权限：新增角色或模块只需插入记录
 CREATE TABLE role_permissions (

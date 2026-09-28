@@ -19,9 +19,62 @@ const CLASSES_PATH = '/api/teacher/classes';
 const CLASS_RE = /^\/api\/teacher\/classes\/(\d+)$/;
 const ATTENDANCE_PATH = '/api/teacher/attendance';
 const ATTENDANCE_RE = /^\/api\/teacher\/attendance\/(\d+)$/;
+const PLANS_PATH = '/api/teacher/plans';
+const PLAN_RE = /^\/api\/teacher\/plans\/(\d+)$/;
 
 const DEFAULT_STUDENT_PASSWORD = '123456';
 const ATTENDANCE_STATUS = ['present', 'late', 'absent', 'leave'];
+
+/** 课程性质 → 必修 / 限选 */
+const PLAN_PROP = {
+  '公共必修课': '必修', '公共基础课': '必修', '学科基础课': '必修', '专业基础课': '必修', '专业核心课': '必修',
+  '公共选修课': '限选', '专业任选课': '限选', '专业拓展课': '限选',
+};
+function planPropType(prop) {
+  const s = String(prop || '').trim();
+  if (PLAN_PROP[s]) return PLAN_PROP[s];
+  if (/选修|任选|拓展/.test(s)) return '限选';
+  return '必修';
+}
+function planNameKey(n) { return String(n || '').trim().replace(/\s+/g, ''); }
+/** 合并课程列表：按标准化名称去重，后到的补充 / 覆盖学分与性质 */
+function mergePlanCourses(...lists) {
+  const out = [];
+  const idx = new Map();
+  for (const list of lists) {
+    for (const c of (Array.isArray(list) ? list : [])) {
+      const key = planNameKey(c.name);
+      if (!key) continue;
+      const credit = Number(c.credit);
+      const prop = String(c.prop || '').trim();
+      if (idx.has(key)) {
+        const prev = idx.get(key);
+        if (credit) prev.credit = credit;
+        if (prop) prev.prop = prop;
+        continue;
+      }
+      const item = { name: String(c.name).trim(), credit: Number.isFinite(credit) ? credit : 0, prop };
+      idx.set(key, item);
+      out.push(item);
+    }
+  }
+  return out;
+}
+function countPlanProps(courses) {
+  let nReq = 0, nSel = 0;
+  for (const c of courses) { if (planPropType(c.prop) === '必修') nReq++; else nSel++; }
+  return { nReq, nSel };
+}
+function planToApi(r) {
+  let terms = [], courses = [];
+  try { terms = JSON.parse(r.terms || '[]'); } catch (e) { terms = []; }
+  try { courses = JSON.parse(r.courses || '[]'); } catch (e) { courses = []; }
+  return {
+    id: r.id, grade: r.grade || '', major: r.major || '', academic_year: r.academic_year || '',
+    terms, courses, nReq: r.n_req || 0, nSel: r.n_sel || 0,
+    source_files: r.source_files || '', created_by: r.created_by || '', updated_at: r.updated_at || ''
+  };
+}
 
 /** 允许教师直接改写的数值字段 */
 const NUM_FIELDS = [
@@ -248,6 +301,77 @@ export async function handleTeacher(path, method, ctx) {
     }
 
     return ok({ class_id: cls ? cls.id : null, class_name: className, teacher_account: teacherAccount, created, updated, skipped }, env);
+  }
+
+  // ===================== 教学计划库（全院辅导员共用） =====================
+  if (path === PLANS_PATH && method === 'GET') {
+    const denied = requirePerm(ctx, 'student:read'); if (denied) return denied;
+    const rows = await db.query('SELECT * FROM teaching_plans ORDER BY major, grade DESC, academic_year DESC');
+    return ok(rows.map(planToApi), env);
+  }
+
+  /**
+   * 写入教学计划：以「年级 + 专业 + 学年」为唯一键，重复导入（同一学年的不同学期文件、
+   * 或再次上传同一学期）自动合并课程、累并学期。因此辅导员可按「分年级 / 分学期」多个文件上传。
+   */
+  if (path === PLANS_PATH && method === 'POST') {
+    const denied = requirePerm(ctx, 'student:write'); if (denied) return denied;
+    const d = await request.json();
+    const incoming = Array.isArray(d.plans) ? d.plans : (Array.isArray(d) ? d : [d]);
+    if (!incoming.length) return fail('没有可导入的教学计划', 400, env);
+
+    const results = [];
+    for (const p of incoming) {
+      const grade = String(p.grade || '').trim();
+      const major = String(p.major || '').trim();
+      const academicYear = String(p.academic_year || p.year || '').trim();
+      const termsRaw = Array.isArray(p.terms) ? p.terms : (p.term ? [p.term] : []);
+      const terms = Array.from(new Set(termsRaw.map(t => String(t || '').trim()).filter(Boolean)));
+      const courses = Array.isArray(p.courses) ? p.courses : [];
+      if (!grade && !major && !academicYear) continue;
+
+      const file = String(p.file || p.source_file || '').trim();
+      const exist = await db.queryOne(
+        'SELECT * FROM teaching_plans WHERE grade = ? AND major = ? AND academic_year = ?',
+        [grade, major, academicYear]
+      );
+
+      if (exist) {
+        const oldTerms = (() => { try { return JSON.parse(exist.terms || '[]'); } catch (e) { return []; } })();
+        const oldCourses = (() => { try { return JSON.parse(exist.courses || '[]'); } catch (e) { return []; } })();
+        const merged = mergePlanCourses(oldCourses, courses);
+        const finalTerms = Array.from(new Set(oldTerms.concat(terms)));
+        const cnt = countPlanProps(merged);
+        const files = Array.from(new Set((exist.source_files || '').split('、').concat(file).filter(Boolean)));
+        await db.update(
+          'UPDATE teaching_plans SET terms = ?, courses = ?, n_req = ?, n_sel = ?, source_files = ?, updated_at = ? WHERE id = ?',
+          [JSON.stringify(finalTerms), JSON.stringify(merged), cnt.nReq, cnt.nSel, files.join('、'), now(), exist.id]
+        );
+        results.push({ id: exist.id, grade, major, academic_year: academicYear, created: false, courses: merged.length, terms: finalTerms.length });
+      } else {
+        const merged = mergePlanCourses([], courses);
+        const cnt = countPlanProps(merged);
+        const r = await db.insert(
+          'INSERT INTO teaching_plans (grade, major, academic_year, terms, courses, n_req, n_sel, source_files, created_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [grade, major, academicYear, JSON.stringify(terms), JSON.stringify(merged), cnt.nReq, cnt.nSel, file, ctx.user.account, now()]
+        );
+        results.push({ id: r.insertId, grade, major, academic_year: academicYear, created: true, courses: merged.length, terms: terms.length });
+      }
+    }
+    if (!results.length) return fail('没有有效的教学计划数据（缺少年级 / 专业 / 学年）', 400, env);
+    return ok(results, env);
+  }
+
+  const pm = path.match(PLAN_RE);
+  if (pm && method === 'DELETE') {
+    const denied = requirePerm(ctx, 'student:write'); if (denied) return denied;
+    const row = await db.queryOne('SELECT * FROM teaching_plans WHERE id = ?', [pm[1]]);
+    if (!row) return fail('教学计划不存在', 404, env);
+    if (ctx.user.role !== 'admin' && row.created_by !== ctx.user.account) {
+      return fail('只能删除自己上传的教学计划（该计划由 ' + row.created_by + ' 上传）', 403, env);
+    }
+    await db.run('DELETE FROM teaching_plans WHERE id = ?', [pm[1]]);
+    return ok(null, env);
   }
 
   // ===================== 学生信息与成绩 =====================

@@ -476,10 +476,10 @@ table.grid tbody tr:hover{background:#f7fafd}
       <button class="icon-x" id="planClose" aria-label="关闭">×</button>
     </div>
     <div class="body">
-      <div class="hint" style="margin-bottom:10px">导入教务处教学计划文件（.xlsx / .xls / .csv），自动识别「年级 / 专业 / 学年学期 / 课程名称 / 课程性质 / 总学分」。导入教务成绩单时按学生班级自动匹配计划：<b>必修×0.7 + 限选×0.3</b>。课程性质映射：公共必修课、公共基础课、学科基础课、专业基础课、专业核心课 → 必修；公共选修课、专业任选课、专业拓展课 → 限选。</div>
+      <div class="hint" style="margin-bottom:10px">教学计划保存在数据库中，<b>全院辅导员共用</b>（每人只需各自上传，他人即可选用）。可识别「年级 / 专业 / 学年学期 / 课程名称 / 课程性质 / 总学分」；课程性质映射：公共必修课、公共基础课、学科基础课、专业基础课、专业核心课 → 必修；公共选修课、专业任选课、专业拓展课 → 限选。导入教务成绩单时按学生班级自动匹配计划：<b>必修×0.7 + 限选×0.3</b>。</div>
       <div class="dropzone" id="planZone">
-        <div class="dz-big">点击选择或拖入教学计划文件（可多选）</div>
-        <div class="dz-small">需包含「课程名称」「课程性质」「总学分」列，可选「年级」「专业」「学年学期」</div>
+        <div class="dz-big">点击选择或拖入教学计划文件（可多选，支持按年级 / 学期拆分上传）</div>
+        <div class="dz-small">需包含「课程名称」「课程性质」「总学分」列，可选「年级」「专业」「学年学期」。<b>同一「年级 + 专业 + 学年」的多个学期会自动合并成一份</b>；重复上传同名课程自动去重。只能删除自己上传的计划</div>
       </div>
       <input type="file" id="planInput" accept=".xlsx,.xls,.csv" multiple style="display:none">
       <div class="import-preview" id="planPreview"></div>
@@ -1379,9 +1379,65 @@ const PLAN_PROP={
   '公共选修课':'限选','专业任选课':'限选','专业拓展课':'限选'
 };
 
-function loadPlans(){try{PLANS=JSON.parse(localStorage.getItem(LS_PLAN_KEY)||'[]')||[];}catch(e){PLANS=[];}}
-function savePlans(){try{localStorage.setItem(LS_PLAN_KEY,JSON.stringify(PLANS));}catch(e){}}
-function planLabel(p){return (p.grade||'')+'级 '+(p.major||'')+(p.term?'（'+p.term+'）':'');}
+// 教学计划改存数据库，全院辅导员共用；localStorage 仅用于一次性迁移旧数据
+function loadLocalPlans(){try{return JSON.parse(localStorage.getItem(LS_PLAN_KEY)||'[]')||[];}catch(e){return [];}}
+function clearLocalPlans(){try{localStorage.removeItem(LS_PLAN_KEY);}catch(e){}}
+function mapPlanApi(p){
+  return {id:p.id,grade:p.grade||'',major:p.major||'',academic_year:p.academic_year||'',
+    terms:Array.isArray(p.terms)?p.terms:[],courses:Array.isArray(p.courses)?p.courses:[],
+    nReq:p.nReq||0,nSel:p.nSel||0,source_files:p.source_files||'',created_by:p.created_by||''};
+}
+async function loadPlans(){
+  try{
+    const r=await apiGet('/api/teacher/plans');
+    PLANS=r.code===0?(r.data||[]).map(mapPlanApi):[];
+    if(r.code!==0)toast(r.msg||'教学计划加载失败','err');
+  }catch(e){PLANS=[];}
+}
+/** 旧浏览器缓存一次性同步到数据库 */
+async function migrateLocalPlans(){
+  const local=loadLocalPlans();
+  if(!local.length)return;
+  const batch=local.map(p=>({
+    grade:p.grade||'',major:p.major||'',
+    academic_year:p.academic_year||extractAcademicYear(p.term)||'',
+    terms:p.term?[p.term]:[],courses:p.courses||[]
+  }));
+  const r=await apiPost('/api/teacher/plans',{plans:batch});
+  if(r.code===0){
+    clearLocalPlans();
+    toast('已把本地 '+batch.length+' 份教学计划同步到数据库，其他辅导员也可使用','ok');
+  }
+}
+function planLabel(p){
+  const ay=p.academic_year||'';
+  const terms=Array.isArray(p.terms)&&p.terms.length?p.terms.join('、'):'';
+  return (p.grade||'')+'级 '+(p.major||'')+(ay?'（'+ay+'学年'+(terms?' · '+terms:'')+'）':(p.term?'（'+p.term+'）':''));
+}
+/** 从「学年学期」推断学年：2023-2024-1 / 2023～2024学年第2学期 / 23-24-1 → 2023-2024 */
+function extractAcademicYear(term){
+  const s=String(term||'').trim();
+  if(!s)return '';
+  let m=s.match(/(20\d{2})\s*[-—–~～至]\s*(20\d{2})/);
+  if(m)return m[1]+'-'+m[2];
+  m=s.match(/(\d{2})\s*[-—–~～]\s*(\d{2})/);
+  if(m){const a=Number(m[1]),b=Number(m[2]);if(b===a+1)return '20'+a+'-20'+b;if(a===b+1)return '20'+b+'-20'+a;}
+  m=s.match(/(20\d{2})/);
+  if(m){const y=Number(m[1]);return /第?\s*[2二]学期|下学期|春/.test(s)?((y-1)+'-'+y):(y+'-'+(y+1));}
+  return '';
+}
+/** 同名课程合并（忽略空白），用于同一学年多学期 / 多班级重复行去重 */
+function dedupeCourses(list){
+  const out=[],idx=new Map();
+  list.forEach(c=>{
+    const k=String(c.name||'').trim().replace(/\s+/g,'');
+    if(!k)return;
+    if(idx.has(k)){const p=idx.get(k);if(c.credit)p.credit=c.credit;if(c.prop)p.prop=c.prop;return;}
+    const item={name:String(c.name).trim(),credit:Number(c.credit)||0,prop:String(c.prop||'').trim()};
+    idx.set(k,item);out.push(item);
+  });
+  return out;
+}
 function propType(prop){const s=String(prop||'');if(PLAN_PROP[s])return PLAN_PROP[s];if(/选修|任选|拓展/.test(s))return '限选';return '必修';}
 function normName(s){return String(s||'').toLowerCase().replace(/\s+/g,'').replace(/[（(]/g,'(').replace(/[）)]/g,')').replace(/[\u3000]/g,'');}
 function normH(h){return String(h).replace(/\s+/g,'').toLowerCase().replace(/[（(].*?[)）]/g,'');}
@@ -1428,22 +1484,45 @@ function renderPlanSelect(prefer){
 function renderPlans(){
   const el=document.getElementById('planList');
   if(!PLANS.length){
-    el.innerHTML='<div class="hint" style="padding:8px 0">尚未导入教学计划。导入后，教务成绩单可按学生班级自动匹配必修/限选。</div>';
+    el.innerHTML='<div class="hint" style="padding:8px 0">教学计划库为空。导入后全院辅导员共用，教务成绩单可按学生班级自动匹配必修/限选。</div>';
     document.getElementById('planFootHint').textContent='共 0 份教学计划';
     return;
   }
-  let html='<div class="plansum-title">已导入 '+PLANS.length+' 份教学计划：</div>'
-    +'<div class="previewlist"><table><tr><th>年级</th><th>专业</th><th>学期</th><th>必修</th><th>限选</th><th>课程数</th><th>操作</th></tr>';
-  PLANS.forEach(p=>{
-    html+='<tr><td>'+esc(p.grade||'')+'</td><td>'+esc(p.major||'')+'</td><td>'+esc(p.term||'')+'</td><td>'+p.nReq+'</td><td>'+p.nSel+'</td><td>'+p.courses.length+'</td>'
-      +'<td><button class="linkbtn" data-delplan="'+p.id+'">删除</button></td></tr>';
+  const sorted=PLANS.slice().sort((a,b)=>{
+    const m=(a.major||'').localeCompare(b.major||'','zh');
+    if(m)return m;
+    const g=(b.grade||'').localeCompare(a.grade||'','zh');
+    if(g)return g;
+    return (b.academic_year||'').localeCompare(a.academic_year||'','zh');
+  });
+  // 汇总哪些计划属于「同一专业 + 同一年级」，并列出其覆盖的学年
+  const gm=new Map();
+  sorted.forEach(p=>{
+    const k=(p.grade||'')+'级 '+(p.major||'');
+    if(!gm.has(k))gm.set(k,[]);
+    gm.get(k).push(p.academic_year||'未识别学年');
+  });
+  let html='<div class="plansum-title">已入库 '+sorted.length+' 份教学计划（同一「年级+专业+学年」已合并）：</div>';
+  html+='<div class="hint" style="margin:0 0 8px;line-height:1.9">归属分组：'
+    +Array.from(gm.entries()).map(([k,ys])=>esc(k)+'（'+esc(ys.join('、'))+'）').join('；')
+    +'</div>';
+  html+='<div class="previewlist"><table><tr><th>年级</th><th>专业</th><th>学年</th><th>覆盖学期</th><th>必修</th><th>限选</th><th>课程数</th><th>来源 / 上传人</th><th>操作</th></tr>';
+  sorted.forEach(p=>{
+    const canDel=p.created_by===USER.account||USER.role==='admin';
+    html+='<tr><td>'+esc(p.grade||'')+'</td><td>'+esc(p.major||'')+'</td><td>'+esc(p.academic_year||'—')+'</td>'
+      +'<td>'+esc((p.terms||[]).join('、')||'—')+'</td><td>'+p.nReq+'</td><td>'+p.nSel+'</td><td>'+(p.courses||[]).length+'</td>'
+      +'<td>'+esc(p.source_files||'—')+(p.created_by?(' · '+esc(p.created_by)):'')+'</td>'
+      +'<td>'+(canDel?('<button class="linkbtn" data-delplan="'+p.id+'">删除</button>'):'<span class="hint">他人上传</span>')+'</td></tr>';
   });
   el.innerHTML=html+'</table></div>';
-  el.querySelectorAll('[data-delplan]').forEach(b=>b.addEventListener('click',()=>{
-    PLANS=PLANS.filter(p=>p.id!==b.dataset.delplan);
-    savePlans();renderPlans();renderPlanSelect();toast('已删除该教学计划','ok');
+  el.querySelectorAll('[data-delplan]').forEach(b=>b.addEventListener('click',async()=>{
+    if(!confirm('确认删除该教学计划？其他辅导员也将无法使用它。'))return;
+    const r=await apiDelete('/api/teacher/plans/'+encodeURIComponent(b.dataset.delplan));
+    if(r.code!==0){toast(r.msg||'删除失败','err');return;}
+    toast('已删除该教学计划','ok');
+    await loadPlans();renderPlans();renderPlanSelect();
   }));
-  document.getElementById('planFootHint').textContent='共 '+PLANS.length+' 份教学计划';
+  document.getElementById('planFootHint').textContent='共 '+sorted.length+' 份教学计划（全院共用）';
 }
 function parsePlanWorkbook(rows){
   if(!rows.length)throw new Error('文件为空');
@@ -1456,21 +1535,27 @@ function parsePlanWorkbook(rows){
   const ii={};
   rows[hi].forEach((h,i)=>{ii[String(h).trim().replace(/\s+/g,'')]=i;});
   const pick=(row,keys)=>{for(const k of keys){if(ii[k]!==undefined&&row[ii[k]]!==undefined&&row[ii[k]]!==null&&String(row[ii[k]]).trim()!=='')return String(row[ii[k]]).trim();}return '';};
+  // 同一「年级 + 专业 + 学年」合并为一份：把同学年的多个学期整合在一起（可跨文件累积）
   const groups=new Map();
   rows.slice(hi+1).forEach(row=>{
     if(!row||!row.length)return;
     const grade=pick(row,['年级']),major=pick(row,['专业','专业名称']),name=pick(row,['课程名称','课程名']),
-          prop=pick(row,['课程性质','性质']),credit=pick(row,['总学分','学分']),term=pick(row,['学年学期','学期']);
+          prop=pick(row,['课程性质','性质']),credit=pick(row,['总学分','学分']),
+          term=pick(row,['学年学期','学期']),ay=pick(row,['学年']);
     if(!name)return;
-    const key=grade+'|'+major+'|'+term;
-    if(!groups.has(key))groups.set(key,{grade,major,term,courses:[]});
-    groups.get(key).courses.push({name,credit:credit===''?0:Number(credit),prop});
+    const year=extractAcademicYear(term)||extractAcademicYear(ay);
+    const key=grade+'|'+major+'|'+year;
+    if(!groups.has(key))groups.set(key,{grade,major,academic_year:year,terms:[],courses:[]});
+    const g=groups.get(key);
+    if(term&&g.terms.indexOf(term)<0)g.terms.push(term);
+    g.courses.push({name,credit:credit===''?0:Number(credit),prop});
   });
   const plans=[];
   groups.forEach(g=>{
+    const courses=dedupeCourses(g.courses);
     let nReq=0,nSel=0;
-    g.courses.forEach(c=>{if(propType(c.prop)==='必修')nReq++;else nSel++;});
-    plans.push({id:'p'+Date.now().toString(36)+'_'+plans.length,grade:g.grade,major:g.major,term:g.term,courses:g.courses,nReq,nSel});
+    courses.forEach(c=>{if(propType(c.prop)==='必修')nReq++;else nSel++;});
+    plans.push({grade:g.grade,major:g.major,academic_year:g.academic_year,terms:g.terms,courses,nReq,nSel});
   });
   return plans;
 }
@@ -1650,7 +1735,8 @@ async function handleScoreFile(file){
 }
 async function handlePlanFiles(files){
   const el=document.getElementById('planPreview');
-  let html='',added=0;
+  const batch=[];
+  let html='';
   for(const file of Array.from(files)){
     try{
       const rows=await readWorkbook(file);
@@ -1659,13 +1745,20 @@ async function handlePlanFiles(files){
       html+=esc(file.name)+' → '+plans.length+' 份教学计划';
       plans.forEach(p=>{html+='（'+esc(planLabel(p))+' 必修'+p.nReq+' / 限选'+p.nSel+'）';});
       html+='<br>';
-      if(plans.length){PLANS=PLANS.concat(plans);added+=plans.length;}
+      batch.push(...plans);
     }catch(e){
       html+='<span class="bad">'+esc(file.name)+' 解析失败：'+esc((e&&e.message)||e)+'</span><br>';
     }
   }
   el.innerHTML=html||'<span class="bad">未读取到文件</span>';
-  if(added){savePlans();renderPlans();renderPlanSelect();toast('已导入 '+added+' 份教学计划','ok');}
+  if(!batch.length)return;
+  // 服务端按「年级+专业+学年」合并：同一学年不同学期的多个文件会累积到同一份
+  const r=await apiPost('/api/teacher/plans',{plans:batch});
+  if(r.code!==0){toast(r.msg||'教学计划保存失败','err');return;}
+  const merged=(r.data||[]).filter(x=>x.created===false).length;
+  const created=(r.data||[]).filter(x=>x.created===true).length;
+  toast('已保存：新增 '+created+' 份、合并 '+merged+' 份（同一学年）',merged||created?'ok':'err');
+  await loadPlans();renderPlans();renderPlanSelect();
 }
 function bindDropzone(zone,input,onFiles){
   zone.addEventListener('click',()=>input.click());
@@ -1675,23 +1768,29 @@ function bindDropzone(zone,input,onFiles){
   input.addEventListener('change',e=>{if(e.target.files.length)onFiles(e.target.files);e.target.value='';});
 }
 
-document.getElementById('btnPlanLib').addEventListener('click',()=>{
-  renderPlans();renderPlanSelect();
+document.getElementById('btnPlanLib').addEventListener('click',async()=>{
+  await loadPlans();renderPlans();renderPlanSelect();
   document.getElementById('planOverlay').classList.add('open');
 });
 document.getElementById('planClose').addEventListener('click',()=>{document.getElementById('planOverlay').classList.remove('open');});
 document.getElementById('planDone').addEventListener('click',()=>{document.getElementById('planOverlay').classList.remove('open');});
 document.getElementById('planOverlay').addEventListener('click',e=>{if(e.target===document.getElementById('planOverlay'))document.getElementById('planOverlay').classList.remove('open');});
-document.getElementById('planClear').addEventListener('click',()=>{
+// 库是全院共用的，因此「清空」只作用于本人上传（管理员可清全部）的部分
+document.getElementById('planClear').addEventListener('click',async()=>{
   if(!PLANS.length)return;
-  if(!confirm('确认清空全部 '+PLANS.length+' 份教学计划？'))return;
-  PLANS=[];savePlans();renderPlans();renderPlanSelect();toast('已清空教学计划','ok');
+  const isAdmin=USER.role==='admin';
+  const mine=PLANS.filter(p=>isAdmin||p.created_by===USER.account);
+  if(!mine.length){toast('教学计划库中暂无你上传的计划（他人上传的不可删除）','err');return;}
+  if(!confirm('确认清空'+(isAdmin?'全部':'你上传的')+' '+mine.length+' 份教学计划？'+(isAdmin?'':'其他辅导员上传的计划不受影响。')))return;
+  let done=0;
+  for(const p of mine){const r=await apiDelete('/api/teacher/plans/'+encodeURIComponent(p.id));if(r.code===0)done++;}
+  toast('已清空 '+done+' 份教学计划','ok');
+  await loadPlans();renderPlans();renderPlanSelect();
 });
 document.getElementById('planSelect').addEventListener('change',updatePlanHint);
 bindDropzone(document.getElementById('planZone'),document.getElementById('planInput'),handlePlanFiles);
 bindDropzone(document.getElementById('scoreZone'),document.getElementById('scoreFile'),files=>handleScoreFile(files[0]));
-loadPlans();
-renderPlanSelect();
+// 注意：教学计划需访问接口，必须在会话（TOKEN/USER）就绪后加载，见文件末尾
 
 document.getElementById('btnScoreImport').addEventListener('click',async()=>{
   if(!pendingScores){toast('请先选择成绩文件','err');return;}
@@ -1737,6 +1836,12 @@ document.querySelectorAll('#mainTabs .tabbtn').forEach(btn=>{
     TOKEN=session.token;
     USER=session.user;
     enterMain();
+    // 教学计划库为全院共享：先把旧浏览器缓存一次性同步到数据库，再加载共享库
+    (async()=>{
+      await migrateLocalPlans();
+      await loadPlans();
+      renderPlanSelect();
+    })();
   }
 })();
 </script>
