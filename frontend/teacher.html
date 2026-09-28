@@ -312,7 +312,9 @@ table.grid tbody tr:hover{background:#f7fafd}
       <div class="right">
         <button class="btn" id="btnGoImportScore">导入成绩</button>
         <button class="btn" id="btnBackup">导出数据备份</button>
-        <button class="btn primary" id="btnExportCsv">导出综测评分表</button>
+        <button class="btn" id="btnExportCsv">导出明细 CSV</button>
+        <button class="btn" id="btnExportPersonal">导出个人测评表（Word）</button>
+        <button class="btn primary" id="btnExportSummary">导出综测汇总表</button>
       </div>
     </div>
     <div class="stats" id="stats">
@@ -526,6 +528,24 @@ table.grid tbody tr:hover{background:#f7fafd}
     var s=document.createElement('script');
     s.src=libs[i];
     s.onload=function(){try{window.dispatchEvent(new Event('xlsxready'));}catch(e){}};
+    s.onerror=function(){tryLoad(i+1);};
+    document.head.appendChild(s);
+  }
+  tryLoad(0);
+})();
+</script>
+<!-- 压缩组件：双源加载（用于按官方模板导出 xlsx / docx） -->
+<script>
+(function(){
+  var libs=[
+    'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
+  ];
+  function tryLoad(i){
+    if(i>=libs.length){window.__jszipFailed=true;return;}
+    var s=document.createElement('script');
+    s.src=libs[i];
+    s.onload=function(){try{window.dispatchEvent(new Event('jszipready'));}catch(e){}};
     s.onerror=function(){tryLoad(i+1);};
     document.head.appendChild(s);
   }
@@ -832,12 +852,17 @@ async function loadStudents(){
   }catch(e){toast('学生数据加载失败：'+((e&&e.message)||e),'err');}
 }
 
+/** 当前「年级 / 专业」筛选下可见的学生（表格展示与导出共用同一口径） */
+function visibleStudents(){
+  const fg=document.getElementById('filterGrade').value;
+  const fm=document.getElementById('filterMajor').value;
+  return studentsData.filter(s=>(!fg||(s.grade||'')===fg)&&(!fm||(s.zhuanye||'')===fm));
+}
+
 function renderScoreTable(){
   const tbody=document.getElementById('scoreTbody');
   const empty=document.getElementById('scoreEmpty');
-  const fg=document.getElementById('filterGrade').value;
-  const fm=document.getElementById('filterMajor').value;
-  const view=studentsData.filter(s=>(!fg||(s.grade||'')===fg)&&(!fm||(s.zhuanye||'')===fm));
+  const view=visibleStudents();
   const n=view.length;
   document.getElementById('stCount').textContent=n;
   const active=view.filter(s=>s.status==='在读');
@@ -1310,7 +1335,127 @@ document.getElementById('btnExportCsv').addEventListener('click',()=>{
   const csv=[head].concat(rows).map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\r\n');
   // 加 BOM，Excel 打开中文不乱码
   downloadFile('综测评分表_'+stamp()+'.csv','\ufeff'+csv,'text/csv;charset=utf-8');
-  toast('已导出综测评分表','ok');
+  toast('已导出明细 CSV','ok');
+});
+
+/* ================= 按官方模板导出（汇总表 xlsx / 个人测评表 docx） =================
+ * 做法：直接改写 Office 文件的内部 XML 并复用模板自带的样式索引，
+ * 因此字体（方正公文小标宋 / 仿宋）、边框、对齐、合并单元格与列宽全部与官方模板一致。
+ */
+const TPL_SUMMARY='/templates/zongce-summary-template.xlsx';
+const TPL_PERSONAL='/templates/personal-zongce-template.docx';
+const SUMMARY_COLS=['A','B','C','D','E','F','G','H','I','J'];
+// 模板首个数据行（第 3 行）各列的样式索引
+const SUMMARY_STYLE={A:14,B:15,C:16,D:14,E:17,F:18,G:17,H:17,I:17,J:19};
+
+function xmlEsc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function round2(v){return Math.round(Number(v)*100)/100;}
+function downloadBlob(name,blob){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=name;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},0);
+}
+function ensureJszip(){
+  if(typeof JSZip==='undefined'){toast('文档导出组件未加载（需联网），请稍后重试','err');return false;}
+  return true;
+}
+async function fetchTemplate(url){
+  const r=await fetch(url);
+  if(!r.ok)throw new Error('模板加载失败（HTTP '+r.status+'）');
+  return await r.arrayBuffer();
+}
+/** 生成一行数据 XML：文本用 inlineStr、数值用 <v>，样式沿用模板对应列 */
+function buildSummaryRow(rn,values){
+  let cells='';
+  for(let i=0;i<SUMMARY_COLS.length;i++){
+    const col=SUMMARY_COLS[i],v=values[i],s=SUMMARY_STYLE[col],ref=col+rn;
+    if(v===null||v===undefined||v==='')cells+='<c r="'+ref+'" s="'+s+'"/>';
+    else if(typeof v==='number'&&isFinite(v))cells+='<c r="'+ref+'" s="'+s+'"><v>'+v+'</v></c>';
+    else cells+='<c r="'+ref+'" s="'+s+'" t="inlineStr"><is><t>'+xmlEsc(v)+'</t></is></c>';
+  }
+  return '<row r="'+rn+'" s="1" customFormat="1" ht="16" customHeight="1" spans="1:10">'+cells+'</row>';
+}
+/** 导出《学生综合素质测评汇总表》：按当前年级 / 专业筛选结果填充官方模板 */
+async function exportSummaryXlsx(){
+  if(!ensureJszip())return;
+  const list=visibleStudents();
+  if(!list.length){toast('当前筛选下没有可导出的学生','err');return;}
+  try{
+    const buf=await fetchTemplate(TPL_SUMMARY);
+    const zip=await JSZip.loadAsync(buf);
+    let xml=await zip.file('xl/worksheets/sheet1.xml').async('string');
+    const startIdx=xml.indexOf('<row r="3"');
+    const dataEnd=xml.lastIndexOf('</sheetData>');
+    if(startIdx<0||dataEnd<0)throw new Error('模板结构不符（未找到数据行区域）');
+    // 模板第 9 行是制表提示，作为脚注移到数据末尾
+    const noteRow=(xml.match(/<row r="9"[\s\S]*?<\/row>/)||[''])[0];
+    let rows='';
+    list.forEach((s,i)=>{
+      rows+=buildSummaryRow(3+i,[
+        s.rank==null?'':s.rank,
+        s.bj||'',s.xm||'',s.xh||'',
+        round2(s.deyuScore),round2(s.zhiyuScore),round2(s.tiyuScore),round2(s.meiyuScore),round2(s.laoyuScore),
+        round2(s.zongceScore)
+      ]);
+    });
+    const lastRow=3+list.length-1;
+    let noteNew=0;
+    if(noteRow){
+      noteNew=lastRow+1;
+      rows+=noteRow.replace('r="9"','r="'+noteNew+'"').replace(/r="([A-J])9"/g,'r="$1'+noteNew+'"');
+      xml=xml.replace(/<mergeCell ref="A9:J9"\/>/,'<mergeCell ref="A'+noteNew+':J'+noteNew+'"/>');
+    }
+    xml=xml.slice(0,startIdx)+rows+xml.slice(dataEnd);
+    xml=xml.replace(/<dimension ref="[^"]*"\/>/,'<dimension ref="A1:J'+(lastRow+(noteNew?1:0))+'"/>');
+    zip.file('xl/worksheets/sheet1.xml',xml);
+    const out=await zip.generateAsync({type:'blob',compression:'DEFLATE'});
+    downloadBlob('湖南民族职业学院学生综合素质测评汇总表_'+stamp()+'.xlsx',out);
+    toast('已导出汇总表 '+list.length+' 人（官方模板）','ok');
+  }catch(e){toast('汇总表导出失败：'+((e&&e.message)||e),'err');}
+}
+/** 导出《学生个人综合素质测评表》：勾选多人时打包为 zip */
+async function exportPersonalDocx(list){
+  if(!ensureJszip())return;
+  if(!list.length){toast('请先勾选要导出的学生','err');return;}
+  try{
+    const buf=await fetchTemplate(TPL_PERSONAL);
+    const zipAll=new JSZip();
+    for(const s of list){
+      const zip=await JSZip.loadAsync(buf);
+      let xml=await zip.file('word/document.xml').async('string');
+      const ko=s.koufenScore;
+      const parts=[];
+      if(Number(s.koufen_chufen))parts.push('处分 '+Number(s.koufen_chufen)+' 分');
+      if(Number(s.koufen_richang))parts.push('日常 '+Number(s.koufen_richang)+' 分');
+      const map={
+        bj:s.bj||'',xh:s.xh||'',xm:s.xm||'',
+        de:s.deyuScore.toFixed(2),zhi:s.zhiyuScore.toFixed(2),ti:s.tiyuScore.toFixed(2),
+        mei:s.meiyuScore.toFixed(2),lao:s.laoyuScore.toFixed(2),
+        koufen_content:parts.length?parts.join('；'):'无',
+        koufen:ko<0?ko.toFixed(2):'0',
+        total:s.zongceScore.toFixed(2)
+      };
+      for(const k of Object.keys(map))xml=xml.split('{'+k+'}').join(xmlEsc(map[k]));
+      zip.file('word/document.xml',xml);
+      const out=await zip.generateAsync({type:'blob',compression:'DEFLATE'});
+      const fname=(s.xh||'未知学号')+'_'+(s.xm||'')+'_学生综合素质测评表.docx';
+      if(list.length===1)downloadBlob(fname,out);
+      else zipAll.file(fname,out);
+    }
+    if(list.length>1){
+      const zb=await zipAll.generateAsync({type:'blob',compression:'DEFLATE'});
+      downloadBlob('学生综合素质测评表_'+list.length+'份_'+stamp()+'.zip',zb);
+    }
+    toast('已导出个人测评表 '+list.length+' 份','ok');
+  }catch(e){toast('个人测评表导出失败：'+((e&&e.message)||e),'err');}
+}
+document.getElementById('btnExportSummary').addEventListener('click',exportSummaryXlsx);
+document.getElementById('btnExportPersonal').addEventListener('click',()=>{
+  const ids=getSelectedIds();
+  exportPersonalDocx(ids.length?studentsData.filter(s=>ids.indexOf(s.id)>=0):[]);
 });
 
 document.getElementById('btnBackup').addEventListener('click',()=>{
