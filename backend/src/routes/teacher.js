@@ -92,21 +92,23 @@ const STUDENT_STATUS_ALLOWED = ['在读', '休学', '退学', '转学', '保留�
 const JSON_FIELDS = ['deyu_ganbu', 'deyu_rongyu', 'zhiyu_jineng'];
 
 /**
- * 本学院专业范围：辅导员可查看本学院所有专业的学生 / 班级（含非本人所管的班级），
- * 便于跨辅导员查看同学院数据；写操作仍通过 assertOwnClass / assertOwnStudent 限制为本人负责。
+ * 辅导员可见的专业：由「其所带班级的专业」推导，而不是写死学院专业清单。
+ * 即：教师能看见自己所带班级对应专业的全部学生 / 班级（含同专业其他辅导员所带的班级），
+ * 非其所带专业一律不可见。所带班级未填专业时，退化为只能看见本人所管的学生。
+ *
+ * 写操作不受此影响，仍由 assertOwnClass / assertOwnStudent 限制为本人负责。
  */
-const COLLEGE_MAJORS = ['移动应用开发', '数字媒体技术', '软件技术', '云计算技术应用', '工业机器人技术', '软件工程'];
+const TAUGHT_MAJORS_SQL = `SELECT major FROM classes WHERE teacher_account = ? AND major <> ''`;
 
 /**
- * 归属过滤：超级管理员看全部；辅导员看「本学院专业的学生 + 本人负责的班级」。
+ * 归属过滤：超级管理员看全部；辅导员看「所带班级专业的学生 + 本人负责的学生」。
  * @returns {{sql:string, params:any[]}} 追加到 WHERE 后的片段
  */
 function ownerScope(ctx, alias = 's') {
   if (ctx.user.role === 'admin') return { sql: '', params: [] };
-  const ph = COLLEGE_MAJORS.map(() => '?').join(',');
   return {
-    sql: ` AND (${alias}.zhuanye IN (${ph}) OR ${alias}.fdy = ?)`,
-    params: [...COLLEGE_MAJORS, ctx.user.account]
+    sql: ` AND (${alias}.zhuanye IN (${TAUGHT_MAJORS_SQL}) OR ${alias}.fdy = ?)`,
+    params: [ctx.user.account, ctx.user.account]
   };
 }
 
@@ -149,9 +151,9 @@ export async function handleTeacher(path, method, ctx) {
                FROM classes c WHERE 1=1`;
     const params = [];
     if (ctx.user.role !== 'admin') {
-      const ph = COLLEGE_MAJORS.map(() => '?').join(',');
-      sql += ` AND (c.major IN (${ph}) OR c.teacher_account = ?)`;
-      params.push(...COLLEGE_MAJORS, ctx.user.account);
+      // 只列出「所带班级专业」下的全部班级（含其他辅导员的同专业班级）+ 本人所管班级
+      sql += ` AND (c.major IN (${TAUGHT_MAJORS_SQL}) OR c.teacher_account = ?)`;
+      params.push(ctx.user.account, ctx.user.account);
     }
     sql += ' ORDER BY c.name';
     return ok(await db.query(sql, params), env);
