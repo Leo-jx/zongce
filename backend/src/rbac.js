@@ -22,6 +22,7 @@ export const PERMISSION_DEFS = [
   { key: 'teacher:read', group: '教师', label: '查看教师信息' },
   { key: 'teacher:write', group: '教师', label: '管理教师账号' },
   { key: 'user:manage', group: '账号', label: '管理账号（新增 / 停用）' },
+  { key: 'file:manage', group: '系统', label: '管理证明材料（清理 KV 占用）' },
   { key: 'permission:manage', group: '系统', label: '管理角色权限' },
 ];
 

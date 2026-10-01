@@ -13,6 +13,7 @@ import { requirePerm, PERMISSION_DEFS, PERMISSION_KEYS, ROLE_LABELS, ROLE_DEFAUL
 const PERM_PATH = '/api/admin/permissions';
 const ACCOUNTS_PATH = '/api/admin/accounts';
 const ACCOUNT_RE = /^\/api\/admin\/accounts\/(\d+)$/;
+const PROOFS_PATH = '/api/admin/proofs';
 
 const DEFAULT_PASSWORD = '123456';
 
@@ -56,6 +57,45 @@ export async function handleAdmin(path, method, ctx) {
       pendingApplications: await one("SELECT COUNT(*) AS c FROM applications WHERE status = 'pending'"),
       attendanceToday: await one('SELECT COUNT(*) AS c FROM attendance WHERE date = ?', [now().slice(0, 10)]),
     }, env);
+  }
+
+  // ===================== 证明材料占用（Workers KV） =====================
+  // GET：统计可清理的证明材料；DELETE：实际删除 KV 值与 D1 记录
+  if (path === PROOFS_PATH && method === 'GET') {
+    const denied = requirePerm(ctx, 'file:manage'); if (denied) return denied;
+    const stat = async (sql, params = []) => (await db.queryOne(sql, params)) || { c: 0, s: 0 };
+    return ok({
+      all: await stat('SELECT COUNT(*) AS c, COALESCE(SUM(size),0) AS s FROM proofs'),
+      rejected: await stat(`SELECT COUNT(*) AS c, COALESCE(SUM(p.size),0) AS s FROM proofs p
+                            JOIN applications a ON a.id = p.application_id WHERE a.status = 'rejected'`),
+      orphan: await stat('SELECT COUNT(*) AS c, COALESCE(SUM(size),0) AS s FROM proofs WHERE application_id IS NULL'),
+    }, env);
+  }
+
+  if (path === PROOFS_PATH && method === 'DELETE') {
+    const denied = requirePerm(ctx, 'file:manage'); if (denied) return denied;
+    const mode = String(ctx.searchParams.get('mode') || 'orphan').toLowerCase();
+    let sql = 'SELECT id, file_path, size FROM proofs p';
+    const params = [];
+    if (mode === 'rejected') {
+      sql += ' WHERE p.id IN (SELECT p2.id FROM proofs p2 JOIN applications a ON a.id = p2.application_id WHERE a.status = ?)';
+      params.push('rejected');
+    } else if (mode === 'orphan') {
+      sql += ' WHERE p.application_id IS NULL';
+    }
+    const rows = await db.query(sql, params);
+
+    const kv = env.FILES;
+    let deleted = 0, kvDeleted = 0, bytes = 0;
+    for (const r of rows) {
+      if (kv && r.file_path) {
+        try { await kv.delete(r.file_path); kvDeleted++; } catch (e) { /* 值可能已过期，忽略 */ }
+      }
+      await db.run('DELETE FROM proofs WHERE id = ?', [r.id]);
+      deleted++;
+      bytes += Number(r.size) || 0;
+    }
+    return ok({ mode, deleted, kvDeleted, bytes }, env);
   }
 
   // ===================== 角色权限 =====================

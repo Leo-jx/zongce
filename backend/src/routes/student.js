@@ -7,9 +7,21 @@ import { calcScores } from '../calc.js';
 
 const LIST_PATH = '/api/student/applications';
 const DETAIL_RE = /^\/api\/student\/applications\/(\d+)$/;
+const SCORE_PATH = '/api/student/score';
 
 export async function handleStudent(path, method, ctx) {
   const { request, env, db, user } = ctx;
+
+  // 学生查看本人综测成绩：只返回自己的档案（含班级年级），分数由前端 score.js 统一计算
+  if (path === SCORE_PATH && method === 'GET') {
+    const stu = await db.queryOne('SELECT * FROM students WHERE xh = ?', [user.account]);
+    if (!stu) return fail('学生档案不存在，请联系辅导员', 404, env);
+    const cls = stu.class_id
+      ? await db.queryOne('SELECT grade, major, name FROM classes WHERE id = ?', [stu.class_id])
+      : null;
+    // 返回完整档案（供前端计算五育得分）+ 由班级带出的年级
+    return ok({ ...stu, grade: cls ? (cls.grade || '') : '' }, env);
+  }
 
   if (path === LIST_PATH && method === 'GET') {
     const stu = await db.queryOne('SELECT id FROM students WHERE xh = ?', [user.account]);

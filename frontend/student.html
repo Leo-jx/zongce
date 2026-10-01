@@ -75,6 +75,12 @@ body{font-family:'Microsoft YaHei','PingFang SC',system-ui,sans-serif;background
 .app-status{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:12px}
 .app-status h2{font-size:15px;color:var(--primary);margin-bottom:8px}
 .app-item{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:13px}
+.score-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:4px}
+.score-cell{border:1px solid var(--line);border-radius:9px;padding:9px 10px;text-align:center;background:#f8fafc}
+.score-cell .k{font-size:12px;color:var(--ink-2)}
+.score-cell .v{font-size:19px;font-weight:700;color:var(--primary);margin-top:3px}
+.score-cell.total{background:#f0f9f4;border-color:#bfe3ce}
+.score-cell.total .v{color:var(--ok);font-size:22px}
 .app-item .app-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
 .app-item .app-time{font-size:11px;color:var(--ink-3)}
 .status-pending{color:var(--warn);font-weight:600}
@@ -108,6 +114,15 @@ body{font-family:'Microsoft YaHei','PingFang SC',system-ui,sans-serif;background
     <div class="app-status" id="appStatusSection">
       <h2>我的申请状态</h2>
       <div id="appStatusList"><div class="hint">暂无申请记录</div></div>
+    </div>
+
+    <div class="app-status" id="scoreSection">
+      <h2>我的综测成绩</h2>
+      <div class="score-grid" id="scoreGrid"><div class="hint">加载中…</div></div>
+      <div class="btnrow" style="margin-top:10px">
+        <button class="btn primary" id="btnExportMine">导出我的个人测评表（Word）</button>
+      </div>
+      <div class="hint" style="margin-top:6px">分数为辅导员审核通过后累计的结果；导出为学院统一模板的《学生综合素质测评表》。</div>
     </div>
 
     <div class="steps">
@@ -193,8 +208,27 @@ body{font-family:'Microsoft YaHei','PingFang SC',system-ui,sans-serif;background
 
 <div class="toast" id="toast"></div>
 
+<!-- 压缩组件：双源加载（用于导出个人测评表 docx） -->
+<script>
+(function(){
+  var libs=[
+    'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
+  ];
+  function tryLoad(i){
+    if(i>=libs.length){window.__jszipFailed=true;return;}
+    var s=document.createElement('script');
+    s.src=libs[i];
+    s.onload=function(){try{window.dispatchEvent(new Event('jszipready'));}catch(e){}};
+    s.onerror=function(){tryLoad(i+1);};
+    document.head.appendChild(s);
+  }
+  tryLoad(0);
+})();
+</script>
 <script src="config.js"></script>
 <script src="auth.js"></script>
+<script src="score.js"></script>
 <script>
 const API = window.API_BASE || '';
 let TOKEN = '';
@@ -471,6 +505,85 @@ function toast(msg, type){
   toastTimer = setTimeout(()=>{ t.className = 'toast'; }, 2400);
 }
 
+/* ============ 我的综测成绩 + 导出个人测评表 ============ */
+const TPL_PERSONAL = '/templates/personal-zongce-template.docx';
+let MY_ROW = null;
+
+async function loadMyScore(){
+  const el = document.getElementById('scoreGrid');
+  try{
+    const resp = await fetch(API+'/api/student/score', { headers: { 'Authorization': 'Bearer '+TOKEN } });
+    const result = await resp.json();
+    if(result.code !== 0){
+      el.innerHTML = '<div class="hint">成绩加载失败：'+esc(result.msg||'')+'</div>';
+      return;
+    }
+    MY_ROW = result.data;
+    renderMyScore();
+  }catch(e){
+    el.innerHTML = '<div class="hint">成绩加载失败</div>';
+  }
+}
+
+function renderMyScore(){
+  const el = document.getElementById('scoreGrid');
+  if(!MY_ROW){ el.innerHTML = '<div class="hint">暂无成绩数据</div>'; return; }
+  // 计分口径统一使用 score.js，与教师端完全一致
+  const s = ZCScore.toStudent(MY_ROW);
+  const de = ZCScore.calcDeyu(s), zhi = ZCScore.calcZhiyu(s), ti = ZCScore.calcTiyu(s);
+  const mei = ZCScore.calcMeiyu(s), lao = ZCScore.calcLaoyu(s);
+  const ko = ZCScore.calcKoufen(s), total = ZCScore.calcZongce(s);
+  const cells = [
+    ['德育（20%）', de.toFixed(2)], ['智育（50%）', zhi.toFixed(2)], ['体育（10%）', ti.toFixed(2)],
+    ['美育（10%）', mei.toFixed(2)], ['劳育（10%）', lao.toFixed(2)], ['扣分', ko.toFixed(0)]
+  ];
+  let html = cells.map(c=>'<div class="score-cell"><div class="k">'+esc(c[0])+'</div><div class="v">'+esc(c[1])+'</div></div>').join('');
+  html += '<div class="score-cell total"><div class="k">综测总分</div><div class="v">'+total.toFixed(2)+'</div></div>';
+  el.innerHTML = html;
+}
+
+function xmlEsc(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/** 导出本人的《学生个人综合素质测评表》（docx 官方模板 + 占位符替换） */
+async function exportMine(){
+  if(!MY_ROW){ toast('成绩尚未加载，请稍后重试','err'); return; }
+  if(typeof JSZip === 'undefined'){ toast('文档组件未加载（需联网），请稍后重试','err'); return; }
+  try{
+    const r = await fetch(TPL_PERSONAL);
+    if(!r.ok) throw new Error('模板加载失败（HTTP '+r.status+'）');
+    const buf = await r.arrayBuffer();
+    const zip = await JSZip.loadAsync(buf);
+    let xml = await zip.file('word/document.xml').async('string');
+    const s = ZCScore.toStudent(MY_ROW);
+    const ko = ZCScore.calcKoufen(s);
+    const parts = [];
+    if(Number(MY_ROW.koufen_chufen)) parts.push('处分 '+Number(MY_ROW.koufen_chufen)+' 分');
+    if(Number(MY_ROW.koufen_richang)) parts.push('日常 '+Number(MY_ROW.koufen_richang)+' 分');
+    const map = {
+      bj: MY_ROW.bj || '', xh: MY_ROW.xh || '', xm: MY_ROW.xm || '',
+      de: ZCScore.calcDeyu(s).toFixed(2), zhi: ZCScore.calcZhiyu(s).toFixed(2), ti: ZCScore.calcTiyu(s).toFixed(2),
+      mei: ZCScore.calcMeiyu(s).toFixed(2), lao: ZCScore.calcLaoyu(s).toFixed(2),
+      koufen_content: parts.length ? parts.join('；') : '无',
+      koufen: ko < 0 ? ko.toFixed(2) : '0',
+      total: ZCScore.calcZongce(s).toFixed(2)
+    };
+    for(const k of Object.keys(map)) xml = xml.split('{'+k+'}').join(xmlEsc(map[k]));
+    zip.file('word/document.xml', xml);
+    const out = await zip.generateAsync({ type:'blob', compression:'DEFLATE' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(out);
+    a.download = (MY_ROW.xh||'')+'_'+(MY_ROW.xm||'')+'_学生综合素质测评表.docx';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 0);
+    toast('已导出个人测评表','ok');
+  }catch(e){
+    toast('导出失败：'+((e&&e.message)||e),'err');
+  }
+}
+
 function enterMain(){
   const ls = document.getElementById('loginSection');
   if(ls) ls.classList.add('hidden');
@@ -483,6 +596,7 @@ function enterMain(){
   refreshPreview();
   bindProofs();
   loadAppStatus();
+  loadMyScore();
 }
 
 function doLogout(){
@@ -517,6 +631,7 @@ document.querySelectorAll('.chkgroup input[type=checkbox]:checked').forEach(cb=>
 
 document.getElementById('logoutBtn').addEventListener('click', doLogout);
 document.getElementById('btnSubmit').addEventListener('click', submitApplication);
+document.getElementById('btnExportMine').addEventListener('click', exportMine);
 document.getElementById('btnReset').addEventListener('click', ()=>{
   if(!confirm('确定清空本次申报内容与已上传证明？此操作不可恢复。')) return;
   try{ localStorage.removeItem(LS_KEY); }catch(e){}

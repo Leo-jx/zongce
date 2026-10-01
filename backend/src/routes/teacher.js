@@ -207,7 +207,7 @@ export async function handleTeacher(path, method, ctx) {
     }
 
     // 级联删除：先逐个清空学生及其关联数据（账号 / 考勤 / 申请 / 证明材料），再删班级
-    for (const stu of roster) await purgeStudent(db, stu.id);
+    for (const stu of roster) await purgeStudent(db, stu.id, env);
     await db.run('DELETE FROM classes WHERE id = ?', [cls.id]);
     return ok({ deleted_students: roster.length }, env);
   }
@@ -436,7 +436,7 @@ export async function handleTeacher(path, method, ctx) {
       if (!stu) continue;
       if (ctx.user.role !== 'admin' && stu.fdy !== ctx.user.account) continue;
       if (d.action === 'delete') {
-        await purgeStudent(db, stu.id); deleted++;
+        await purgeStudent(db, stu.id, env); deleted++;
       } else {
         await db.update('UPDATE students SET status = ? WHERE id = ?', [d.status, stu.id]); updated++;
       }
@@ -489,7 +489,7 @@ export async function handleTeacher(path, method, ctx) {
     const { stu, error } = await assertOwnStudent(ctx, sm[1]);
     if (error) return error;
 
-    await purgeStudent(db, stu.id);
+    await purgeStudent(db, stu.id, env);
     return ok(null, env);
   }
 
@@ -645,9 +645,20 @@ export async function handleTeacher(path, method, ctx) {
  * 彻底删除一名学生：考勤 / 证明材料 / 申请明细 / 申请 / 学生档案 / 登录账号。
  * 删除单个学生与「一键删除本班及学生」共用此逻辑，避免遗漏关联表。
  */
-async function purgeStudent(db, studentId) {
+async function purgeStudent(db, studentId, env) {
   const stu = await db.queryOne('SELECT xh FROM students WHERE id = ?', [studentId]);
   await db.run('DELETE FROM attendance WHERE student_id = ?', [studentId]);
+  // 先删除 KV 中的证明文件内容，再删 D1 记录，避免 KV 残留占用
+  const proofRows = await db.query(
+    'SELECT id, file_path FROM proofs WHERE application_id IN (SELECT id FROM applications WHERE student_id = ?)',
+    [studentId]
+  );
+  const kv = env && env.FILES;
+  for (const p of proofRows) {
+    if (kv && p.file_path) {
+      try { await kv.delete(p.file_path); } catch (e) { /* 值可能已过期，忽略 */ }
+    }
+  }
   await db.run('DELETE FROM proofs WHERE application_id IN (SELECT id FROM applications WHERE student_id = ?)', [studentId]);
   await db.run('DELETE FROM application_items WHERE application_id IN (SELECT id FROM applications WHERE student_id = ?)', [studentId]);
   await db.run('DELETE FROM applications WHERE student_id = ?', [studentId]);

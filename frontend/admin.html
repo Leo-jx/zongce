@@ -98,6 +98,16 @@ table.grid tbody tr:hover{background:#f7fafd}
 
   <div id="tab-overview">
     <div class="stats" id="ovStats"></div>
+    <div class="card">
+      <h3>证明材料清理（Workers KV）</h3>
+      <div class="hint" style="margin:0 0 10px">学生上传的证明材料以 base64 存入 KV，长期占用存储空间。可在此一键清理；删除后教师将无法再查看对应证明，请谨慎操作。</div>
+      <div class="stats" id="proofStats"></div>
+      <div class="formrow" style="margin-top:12px">
+        <button class="btn" id="btnCleanOrphan">清理无主材料</button>
+        <button class="btn" id="btnCleanRejected">清理已驳回申请的证明</button>
+        <button class="btn danger" id="btnCleanAll">清理全部证明材料</button>
+      </div>
+    </div>
   </div>
 
   <div id="tab-perms" class="hidden">
@@ -284,7 +294,41 @@ async function loadOverview(){
   const d=r.data;
   const items=[['班级数',d.classes],['学生数',d.students],['教师数',d.teachers],['待审申请',d.pendingApplications],['今日考勤记录',d.attendanceToday]];
   document.getElementById('ovStats').innerHTML=items.map(i=>'<div class="stat"><div class="num">'+esc(i[1])+'</div><div class="lab">'+esc(i[0])+'</div></div>').join('');
+  loadProofStats();
 }
+
+/* ============ 证明材料（KV）清理 ============ */
+function fmtSize(b){
+  b=Number(b)||0;
+  if(b<1024) return b+' B';
+  if(b<1024*1024) return (b/1024).toFixed(1)+' KB';
+  return (b/1024/1024).toFixed(2)+' MB';
+}
+async function loadProofStats(){
+  const el=document.getElementById('proofStats');
+  if(!el) return;
+  try{
+    const r=await apiGet('/api/admin/proofs');
+    if(r.code!==0){el.innerHTML='<div class="hint">无法读取（可能无 file:manage 权限）</div>';return;}
+    const d=r.data;
+    const items=[
+      ['全部材料', d.all.c+' 份 / '+fmtSize(d.all.s)],
+      ['已驳回申请', d.rejected.c+' 份 / '+fmtSize(d.rejected.s)],
+      ['无主（未关联申请）', d.orphan.c+' 份 / '+fmtSize(d.orphan.s)]
+    ];
+    el.innerHTML=items.map(i=>'<div class="stat"><div class="num">'+esc(i[1])+'</div><div class="lab">'+esc(i[0])+'</div></div>').join('');
+  }catch(e){el.innerHTML='<div class="hint">读取失败</div>';}
+}
+async function cleanProofs(mode,label){
+  if(!confirm('确认'+label+'？删除后对应的证明材料将无法恢复，教师端也无法再查看。')) return;
+  const r=await apiDel('/api/admin/proofs?mode='+encodeURIComponent(mode));
+  if(r.code!==0){toast(r.msg||'清理失败','err');return;}
+  toast('已清理 '+r.data.deleted+' 份（释放约 '+fmtSize(r.data.bytes)+'）','ok');
+  loadProofStats();
+}
+document.getElementById('btnCleanOrphan').addEventListener('click',()=>cleanProofs('orphan','清理「无主」证明材料'));
+document.getElementById('btnCleanRejected').addEventListener('click',()=>cleanProofs('rejected','清理「已驳回申请」的证明材料'));
+document.getElementById('btnCleanAll').addEventListener('click',()=>cleanProofs('all','清理「全部」证明材料'));
 
 /* ============ 角色权限 ============ */
 async function loadPerms(){

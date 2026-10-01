@@ -554,6 +554,7 @@ table.grid tbody tr:hover{background:#f7fafd}
 </script>
 <script src="config.js"></script>
 <script src="auth.js"></script>
+<script src="score.js"></script>
 <script>
 const API = window.API_BASE || '';
 let TOKEN = '';
@@ -576,7 +577,6 @@ const OPTS = {
   shehui: [{v:0,t:'无'},{v:10,t:'国家级表彰（负责人/先进个人/报告获奖）+10'},{v:8,t:'省级表彰（负责人/先进个人/报告获奖）+8'},{v:6,t:'市级表彰（负责人/先进个人/报告获奖）+6'},{v:4,t:'校级表彰（负责人/先进个人/报告获奖）+4'},{v:5,t:'国家级先进集体成员 +5'},{v:4,t:'省级先进集体成员 +4'},{v:3,t:'市级先进集体成员 +3'},{v:2,t:'校级先进集体成员 +2'},{v:2,t:'完成社会实践并提交报告（每份）+2'}],
   chufen: [{v:0,t:'无'},{v:30,t:'公安查处/违法违纪等 -30'},{v:20,t:'留校察看 -20'},{v:15,t:'记过 -15'},{v:10,t:'严重警告 -10'},{v:7,t:'警告 -7'},{v:5,t:'全校通报批评 -5'},{v:2,t:'学院通报批评 -2'}]
 };
-const CAP = 20;
 const STATUS_OPTIONS = ['在读','休学','退学','转学','保留学籍','毕业'];
 function statusBadge(st){
   const m={'在读':'ok','休学':'warn','退学':'bad','转学':'bad','保留学籍':'warn','毕业':'muted'};
@@ -589,16 +589,8 @@ const PROOF_LABEL = {
   'l-zhiyuan':'志愿服务','l-xianxue':'无偿献血','l-shehui':'社会实践/表彰','k-chufen':'违纪处分'
 };
 
-function sum(vals){return vals.reduce((a,b)=>a+(Number(b)||0),0);}
-function cap(v){return Math.min(Math.max(v||0,0),CAP);}
-// 德育 = 基础 80 + 奖励分（干部 / 荣誉各封顶 10，奖励合计封顶 20），因此上限 100
-function calcDeyu(s){const d=s.deyu;const reward=Math.min(cap((Number(d.sixiang)||0)+(Number(d.biaozhang)||0)+Math.min(sum(d.ganbu),10)+Math.min(sum(d.rongyu),10)+(Number(d.custom)||0)),20);return 80+reward;}
-function calcZhiyu(s){const z=s.zhiyu;let jl=(Number(z.jingsai)||0)+Math.min(sum(z.jineng),20)+(Number(z.chuangye)||0)+(Number(z.custom)||0);jl=cap(jl);return Math.min((Number(z.zhuanye)||0)+jl,100);}
-function calcTiyu(s){const t=s.tiyu;let jl=(Number(t.jiangli)||0)+(Number(t.custom)||0);jl=cap(jl);return Math.min((Number(t.chengji)||0)+(Number(t.tice)||0)+jl,100);}
-function calcMeiyu(s){const m=s.meiyu;let jl=(Number(m.jiangli)||0)+(Number(m.custom)||0);jl=cap(jl);return Math.min(80+jl,100);}
-function calcLaoyu(s){const l=s.laoyu;const zhiyuan=Math.min(Number(l.zhiyuanCishu)||0,10);const xianxue=(Number(l.xianxue)||0)*5;let jl=zhiyuan+xianxue+(Number(l.qinshi)||0)+(Number(l.shehui)||0)+(Number(l.custom)||0);jl=cap(jl);return Math.min(80+jl,100);}
-function calcKoufen(s){const k=s.koufen;return -((Number(k.chufen)||0)+(Number(k.richang)||0));}
-function calcZongce(s){const de=calcDeyu(s),zhi=calcZhiyu(s),ti=calcTiyu(s),mei=calcMeiyu(s),lao=calcLaoyu(s);return Math.max(0,de*0.20+zhi*0.50+ti*0.10+mei*0.10+lao*0.10+calcKoufen(s));}
+// 计分口径统一在 score.js（学生端 / 教师端共用，杜绝两套规则不一致）
+const {sum,cap,calcDeyu,calcZhiyu,calcTiyu,calcMeiyu,calcLaoyu,calcKoufen,calcZongce,toStudent,toNum,toArr}=ZCScore;
 function esc(x){return String(x||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
 let toastTimer=null;
@@ -795,21 +787,7 @@ function renderReview(data){
 }
 
 /* ---------- 数据模型转换：数据库扁平列 ↔ 编辑用的嵌套结构 ---------- */
-function toNum(v){const n=Number(v);return isNaN(n)?0:n;}
-function toArr(v){try{const p=typeof v==='string'?JSON.parse(v||'[]'):v;return Array.isArray(p)?p:[];}catch(e){return [];}}
-/** 数据库行（deyu_sixiang…）→ calc* / 编辑弹窗使用的嵌套结构 {deyu:{...},zhiyu:{...},…} */
-function toStudent(row){
-  return {...row,
-    id:row.id!=null?row.id:row.xh,
-    status:(row.status||'在读'),
-    deyu:{sixiang:toNum(row.deyu_sixiang),biaozhang:toNum(row.deyu_biaozhang),ganbu:toArr(row.deyu_ganbu),rongyu:toArr(row.deyu_rongyu),custom:toNum(row.deyu_custom)},
-    zhiyu:{zhuanye:toNum(row.zhuanye_score),jingsai:toNum(row.zhiyu_jingsai),jineng:toArr(row.zhiyu_jineng),chuangye:toNum(row.zhiyu_chuangye),custom:toNum(row.zhiyu_custom)},
-    tiyu:{chengji:toNum(row.tiyu_chengji),tice:toNum(row.tiyu_tice),jiangli:toNum(row.tiyu_jiangli),custom:toNum(row.tiyu_custom)},
-    meiyu:{jiangli:toNum(row.meiyu_jiangli),custom:toNum(row.meiyu_custom)},
-    laoyu:{zhiyuanCishu:toNum(row.laoyu_zhiyuanCishu),xianxue:toNum(row.laoyu_xianxue),qinshi:toNum(row.laoyu_qinshi),shehui:toNum(row.laoyu_shehui),custom:toNum(row.laoyu_custom)},
-    koufen:{chufen:toNum(row.koufen_chufen),richang:toNum(row.koufen_richang)}
-  };
-}
+/* toStudent / toNum / toArr 已由 score.js 提供（见文件顶部解构） */
 /** 嵌套结构 → 后端 PUT /api/teacher/students/:xh 需要的扁平字段 */
 function toPayload(s){
   return {
