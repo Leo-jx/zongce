@@ -306,8 +306,14 @@ table.grid tbody tr:hover{background:#f7fafd}
         <span class="hint">休学 / 退学等状态的学生不参与本学年排名与统计</span>
       </div>
       <div class="filters" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <select id="filterGrade" class="imp-input" style="min-width:120px"><option value="">全部年级</option></select>
-        <select id="filterMajor" class="imp-input" style="min-width:170px"><option value="">全部专业</option></select>
+        <select id="filterGrade" class="imp-input" style="min-width:110px"><option value="">全部年级</option></select>
+        <select id="filterMajor" class="imp-input" style="min-width:150px"><option value="">全部专业</option></select>
+        <select id="filterClass" class="imp-input" style="min-width:150px"><option value="">全部班级</option></select>
+        <div class="searchbox">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          <input id="scoreSearch" placeholder="搜索学号 / 姓名…" autocomplete="off">
+        </div>
+        <button class="btn" id="btnScoreFilterReset">重置</button>
       </div>
       <div class="right">
         <button class="btn" id="btnGoImportScore">导入成绩</button>
@@ -831,11 +837,21 @@ async function loadStudents(){
   }catch(e){toast('学生数据加载失败：'+((e&&e.message)||e),'err');}
 }
 
-/** 当前「年级 / 专业」筛选下可见的学生（表格展示与导出共用同一口径） */
+/**
+ * 当前筛选（年级 / 专业 / 班级 / 学号姓名搜索）下可见的学生。
+ * 表格展示、统计与各导出功能共用同一口径，确保「所见即所得」。
+ */
 function visibleStudents(){
   const fg=document.getElementById('filterGrade').value;
   const fm=document.getElementById('filterMajor').value;
-  return studentsData.filter(s=>(!fg||(s.grade||'')===fg)&&(!fm||(s.zhuanye||'')===fm));
+  const fc=document.getElementById('filterClass').value;
+  const q=(document.getElementById('scoreSearch').value||'').trim().toLowerCase();
+  return studentsData.filter(s=>
+    (!fg||(s.grade||'')===fg)
+    &&(!fm||(s.zhuanye||'')===fm)
+    &&(!fc||(s.bj||'')===fc)
+    &&(!q||String(s.xh||'').toLowerCase().indexOf(q)>=0||String(s.xm||'').toLowerCase().indexOf(q)>=0)
+  );
 }
 
 function renderScoreTable(){
@@ -872,26 +888,41 @@ function renderScoreTable(){
   updateSelCount();
 }
 
-// 用当前学生数据填充「年级 / 专业」筛选下拉
+// 用当前学生数据填充「年级 / 专业 / 班级」筛选下拉
 function populateScoreFilters(){
-  const fg=document.getElementById('filterGrade'),fm=document.getElementById('filterMajor');
-  const gSet=[...new Set(studentsData.map(s=>(s.grade||'').trim()).filter(Boolean))].sort();
-  const mSet=[...new Set(studentsData.map(s=>(s.zhuanye||'').trim()).filter(Boolean))].sort();
-  const gv=fg.value,mv=fm.value;
+  const fg=document.getElementById('filterGrade'),fm=document.getElementById('filterMajor'),fc=document.getElementById('filterClass');
+  const uniq=key=>[...new Set(studentsData.map(s=>(s[key]||'').trim()).filter(Boolean))];
+  const gSet=uniq('grade').sort();
+  const mSet=uniq('zhuanye').sort();
+  const cSet=uniq('bj').sort();
+  const gv=fg.value,mv=fm.value,cv=fc.value;
   fg.innerHTML='<option value="">全部年级</option>'+gSet.map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join('');
   fm.innerHTML='<option value="">全部专业</option>'+mSet.map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join('');
+  fc.innerHTML='<option value="">全部班级</option>'+cSet.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
   if(gSet.includes(gv))fg.value=gv;
   if(mSet.includes(mv))fm.value=mv;
+  if(cSet.includes(cv))fc.value=cv;
 }
 document.getElementById('filterGrade').addEventListener('change',renderScoreTable);
 document.getElementById('filterMajor').addEventListener('change',renderScoreTable);
+document.getElementById('filterClass').addEventListener('change',renderScoreTable);
+document.getElementById('scoreSearch').addEventListener('input',renderScoreTable);
+document.getElementById('btnScoreFilterReset').addEventListener('click',()=>{
+  document.getElementById('filterGrade').value='';
+  document.getElementById('filterMajor').value='';
+  document.getElementById('filterClass').value='';
+  document.getElementById('scoreSearch').value='';
+  renderScoreTable();
+});
 function getSelectedIds(){return Array.from(document.querySelectorAll('.rowchk:checked')).map(c=>Number(c.dataset.id));}
 function updateSelCount(){
   const sel=getSelectedIds();
   const el=document.getElementById('selCount');
   if(el)el.textContent='已选 '+sel.length+' 项';
+  // 全选态以「当前筛选后实际渲染的行数」为准，避免筛选时状态误判
+  const total=document.querySelectorAll('#scoreTbody .rowchk').length;
   const a=document.getElementById('chkAll');
-  if(a)a.checked=sel.length>0&&sel.length===studentsData.length;
+  if(a)a.checked=sel.length>0&&sel.length===total;
 }
 
 document.getElementById('scoreTbody').addEventListener('click',e=>{
