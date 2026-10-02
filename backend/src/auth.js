@@ -14,6 +14,11 @@ export function verifyPassword(password, hash) {
   return bcrypt.compareSync(password, hash);
 }
 
+/** 生成密码散列（修改密码 / 重置密码共用） */
+export function hashPassword(password) {
+  return bcrypt.hashSync(password, 10);
+}
+
 export async function signToken(env, user) {
   return new SignJWT({ id: user.id, role: user.role, account: user.account, name: user.name })
     .setProtectedHeader({ alg: 'HS256' })

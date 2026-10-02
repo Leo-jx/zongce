@@ -228,6 +228,7 @@ table.grid tbody tr:hover{background:#f7fafd}
       <div class="sub">在线审核学生综测加分申请 · 德智体美劳五育加权 + 扣分项 · <span id="teacherName"></span></div>
     </div>
     <div class="actions">
+      <button class="btn ghost" id="btnChangePwd">修改密码</button>
       <button class="btn ghost" id="btnLogout">退出登录</button>
     </div>
   </header>
@@ -303,6 +304,7 @@ table.grid tbody tr:hover{background:#f7fafd}
           </select>
           <button class="btn" id="btnBatchStatus">应用</button>
         </span>
+        <button class="btn" id="btnBatchResetPwd">重置选中密码</button>
         <span class="hint">休学 / 退学等状态的学生不参与本学年排名与统计</span>
       </div>
       <div class="filters" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -471,6 +473,7 @@ table.grid tbody tr:hover{background:#f7fafd}
       <div class="modgrid" id="modGrid"></div>
     </div>
     <div class="foot">
+      <button class="btn" id="editResetPwd" style="margin-right:auto">重置该生密码</button>
       <button class="btn" id="editCancel">取消</button>
       <button class="btn primary" id="editSave">保存</button>
     </div>
@@ -561,6 +564,7 @@ table.grid tbody tr:hover{background:#f7fafd}
 <script src="config.js"></script>
 <script src="auth.js"></script>
 <script src="score.js"></script>
+<script src="password.js"></script>
 <script>
 const API = window.API_BASE || '';
 let TOKEN = '';
@@ -955,6 +959,24 @@ document.getElementById('btnBatchStatus').addEventListener('click',async()=>{
   toast('已更新 '+r.data.updated+' 名学生状态为「'+st+'」','ok');
   loadStudents();
 });
+// 直接把所选学生的登录密码重置为初始密码 123456（限本人所管学生，服务端会再次校验归属）
+document.getElementById('btnBatchResetPwd').addEventListener('click',async()=>{
+  const ids=getSelectedIds();
+  if(!ids.length){toast('请先勾选要重置密码的学生','err');return;}
+  if(!confirm('确认将选中的 '+ids.length+' 名学生登录密码重置为 123456？'))return;
+  const r=await apiPost('/api/teacher/students/batch',{action:'reset_password',ids});
+  if(r.code!==0){toast(r.msg||'重置失败','err');return;}
+  toast('已重置 '+r.data.reset+' 名学生密码为 123456','ok');
+});
+// 编辑弹窗内重置单个学生的密码
+document.getElementById('editResetPwd').addEventListener('click',async()=>{
+  const s=studentsData.find(x=>x.id===editId);
+  if(!s)return;
+  if(!confirm('确认将「'+s.xm+'（'+s.xh+'）」的登录密码重置为 123456？'))return;
+  const r=await apiPost('/api/teacher/students/'+encodeURIComponent(s.xh)+'/password',{});
+  if(r.code!==0){toast(r.msg||'重置失败','err');return;}
+  toast('已将 '+s.xm+' 的密码重置为 123456','ok');
+});
 
 function buildSelect(opts,val,multi){
   if(multi){const sel=document.createElement('select');sel.multiple=true;sel.size=Math.min(opts.length,6);sel.style.minHeight='96px';opts.forEach(o=>{const op=document.createElement('option');op.value=o.v;op.textContent=o.t;if((val||[]).includes(o.v))op.selected=true;sel.appendChild(op);});return sel;}
@@ -1076,6 +1098,9 @@ document.getElementById('reviewOverlay').addEventListener('click',e=>{if(e.targe
 document.getElementById('editOverlay').addEventListener('click',e=>{if(e.target===document.getElementById('editOverlay'))document.getElementById('editOverlay').classList.remove('open');});
 
 document.getElementById('btnLogout').addEventListener('click',doLogout);
+document.getElementById('btnChangePwd').addEventListener('click',()=>{
+  ZCPassword.open({token:TOKEN,apiBase:API,onSuccess:m=>toast(m,'ok')});
+});
 
 document.getElementById('filterStatus').addEventListener('change',loadApplications);
 document.getElementById('filterBj').addEventListener('change',loadApplications);

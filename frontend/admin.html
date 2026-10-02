@@ -83,7 +83,7 @@ table.grid tbody tr:hover{background:#f7fafd}
       <h1>综测系统 · 超级管理员端</h1>
       <div class="sub">角色权限配置 · 班级 / 教师 / 学生 / 账号全量管理 · <span id="adminName"></span></div>
     </div>
-    <div><button class="btn ghost" id="btnLogout">退出登录</button></div>
+    <div style="display:flex;gap:8px"><button class="btn ghost" id="btnChangePwd">修改密码</button><button class="btn ghost" id="btnLogout">退出登录</button></div>
   </header>
 
   <div class="tabbar" id="mainTabs">
@@ -213,6 +213,7 @@ table.grid tbody tr:hover{background:#f7fafd}
 
 <script src="config.js"></script>
 <script src="auth.js"></script>
+<script src="password.js"></script>
 <script>
 const API = window.API_BASE || '';
 let TOKEN = '', USER = null, PERMS = [];
@@ -528,6 +529,9 @@ async function loadAttendance(){
 
 /* ============ 事件绑定 ============ */
 document.getElementById('btnLogout').addEventListener('click',doLogout);
+document.getElementById('btnChangePwd').addEventListener('click',()=>{
+  ZCPassword.open({token:TOKEN,apiBase:API,onSuccess:m=>toast(m,'ok')});
+});
 document.getElementById('dlgClose').addEventListener('click',closeDialog);
 document.getElementById('dlgCancel').addEventListener('click',closeDialog);
 document.getElementById('dlgSave').addEventListener('click',()=>{if(dlgSaveHandler)dlgSaveHandler();});

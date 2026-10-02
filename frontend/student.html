@@ -108,7 +108,10 @@ body{font-family:'Microsoft YaHei','PingFang SC',system-ui,sans-serif;background
   <div id="mainSection" class="hidden">
     <div class="user-bar">
       <span>欢迎，<span class="uname" id="userName"></span>（<span id="userXh"></span>）</span>
-      <button class="logout" id="logoutBtn">退出登录</button>
+      <span style="display:flex;gap:8px;align-items:center">
+        <button class="logout" id="btnChangePwd">修改密码</button>
+        <button class="logout" id="logoutBtn">退出登录</button>
+      </span>
     </div>
 
     <div class="app-status" id="appStatusSection">
@@ -229,6 +232,7 @@ body{font-family:'Microsoft YaHei','PingFang SC',system-ui,sans-serif;background
 <script src="config.js"></script>
 <script src="auth.js"></script>
 <script src="score.js"></script>
+<script src="password.js"></script>
 <script>
 const API = window.API_BASE || '';
 let TOKEN = '';
@@ -630,6 +634,9 @@ document.querySelectorAll('.chkgroup input[type=checkbox]:checked').forEach(cb=>
 });
 
 document.getElementById('logoutBtn').addEventListener('click', doLogout);
+document.getElementById('btnChangePwd').addEventListener('click', ()=>{
+  ZCPassword.open({ token: TOKEN, apiBase: API, onSuccess: m=>toast(m,'ok') });
+});
 document.getElementById('btnSubmit').addEventListener('click', submitApplication);
 document.getElementById('btnExportMine').addEventListener('click', exportMine);
 document.getElementById('btnReset').addEventListener('click', ()=>{

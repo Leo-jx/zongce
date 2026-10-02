@@ -7,6 +7,7 @@
 import bcrypt from 'bcryptjs';
 import { ok, fail } from '../http.js';
 import { now } from '../db.js';
+import { hashPassword } from '../auth.js';
 import { SCORE_FIELDS } from '../calc.js';
 import { requirePerm } from '../rbac.js';
 
@@ -15,6 +16,7 @@ const APP_RE = /^\/api\/teacher\/applications\/(\d+)$/;
 const REVIEW_RE = /^\/api\/teacher\/applications\/(\d+)\/review$/;
 const STUDENTS_PATH = '/api/teacher/students';
 const STUDENT_RE = /^\/api\/teacher\/students\/([^/]+)$/;
+const STUDENT_PWD_RE = /^\/api\/teacher\/students\/([^/]+)\/password$/;
 const CLASSES_PATH = '/api/teacher/classes';
 const CLASS_RE = /^\/api\/teacher\/classes\/(\d+)$/;
 const ATTENDANCE_PATH = '/api/teacher/attendance';
@@ -421,27 +423,39 @@ export async function handleTeacher(path, method, ctx) {
     return ok({ id: r.insertId }, env);
   }
 
-  // 批量操作：多选学生删除 / 修改学籍状态（同一条路径，按 action 区分）
+  // 批量操作：多选学生删除 / 修改学籍状态 / 重置密码（同一条路径，按 action 区分）
   if (path === STUDENTS_PATH + '/batch' && method === 'POST') {
     const denied = requirePerm(ctx, 'student:write'); if (denied) return denied;
     const d = await request.json();
     const ids = Array.isArray(d.ids) ? d.ids.map(Number).filter(n => !isNaN(n)) : [];
     if (!ids.length) return fail('请先选择学生', 400, env);
-    if (d.action !== 'delete' && !STUDENT_STATUS_ALLOWED.includes(d.status)) {
+    if (d.action !== 'delete' && d.action !== 'reset_password' && !STUDENT_STATUS_ALLOWED.includes(d.status)) {
       return fail('无效的学生状态', 400, env);
     }
-    let deleted = 0, updated = 0;
+    let deleted = 0, updated = 0, reset = 0;
     for (const id of ids) {
       const stu = await db.queryOne('SELECT * FROM students WHERE id = ?', [id]);
       if (!stu) continue;
       if (ctx.user.role !== 'admin' && stu.fdy !== ctx.user.account) continue;
       if (d.action === 'delete') {
         await purgeStudent(db, stu.id, env); deleted++;
+      } else if (d.action === 'reset_password') {
+        await resetStudentPassword(db, stu.xh); reset++;
       } else {
         await db.update('UPDATE students SET status = ? WHERE id = ?', [d.status, stu.id]); updated++;
       }
     }
-    return ok({ deleted, updated }, env);
+    return ok({ deleted, updated, reset }, env);
+  }
+
+  // 单个学生重置密码（须在 STUDENT_RE 之前匹配，否则会被当成 /students/:xh）
+  const spm = path.match(STUDENT_PWD_RE);
+  if (spm && method === 'POST') {
+    const denied = requirePerm(ctx, 'student:write'); if (denied) return denied;
+    const { stu, error } = await assertOwnStudent(ctx, spm[1]);
+    if (error) return error;
+    await resetStudentPassword(db, stu.xh);
+    return ok({ xh: stu.xh, password: DEFAULT_STUDENT_PASSWORD }, env);
   }
 
   const sm = path.match(STUDENT_RE);
@@ -664,6 +678,23 @@ async function purgeStudent(db, studentId, env) {
   await db.run('DELETE FROM applications WHERE student_id = ?', [studentId]);
   await db.run('DELETE FROM students WHERE id = ?', [studentId]);
   if (stu && stu.xh) await db.run('DELETE FROM users WHERE account = ? AND role = ?', [stu.xh, 'student']);
+}
+
+/** 把某学生的登录密码重置为初始密码（学号即账号） */
+async function resetStudentPassword(db, xh) {
+  const hash = hashPassword(DEFAULT_STUDENT_PASSWORD);
+  const r = await db.update(
+    "UPDATE users SET password_hash = ? WHERE account = ? AND role = 'student'",
+    [hash, xh]
+  );
+  // 极少数情况可能缺账号记录，这里补建一条，保证学生能登录
+  if (!r.affectedRows) {
+    const stu = await db.queryOne('SELECT xm FROM students WHERE xh = ?', [xh]);
+    await db.insert(
+      'INSERT OR IGNORE INTO users (role, account, password_hash, name, status, created_at) VALUES (?, ?, ?, ?, 1, ?)',
+      ['student', xh, hash, stu ? stu.xm : xh, now()]
+    );
+  }
 }
 
 /** 解析以 JSON 数组存储的字段，异常时回落为空数组 */

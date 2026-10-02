@@ -8,7 +8,7 @@ import { json, fail, notFound, preflight } from './http.js';
 import { createDb } from './db.js';
 import { getUserFromRequest } from './auth.js';
 import { loadPermissions } from './rbac.js';
-import { handleLogin } from './routes/auth.js';
+import { handleLogin, handleChangePassword } from './routes/auth.js';
 import { handleStudent } from './routes/student.js';
 import { handleTeacher } from './routes/teacher.js';
 import { handleAdmin } from './routes/admin.js';
@@ -45,6 +45,11 @@ export default {
 
       ctx.user = account;
       ctx.perms = await loadPermissions(ctx.db, account);
+
+      // 修改本人密码：三种角色通用，仅校验原密码，不涉及权限点
+      if (path === '/api/auth/password') {
+        return (await handleChangePassword(path, method, ctx)) || notFound(env);
+      }
 
       if (path.startsWith('/api/student/')) {
         if (account.role !== 'student') return fail('无权限', 403, env);
