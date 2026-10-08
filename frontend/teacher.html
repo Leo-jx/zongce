@@ -374,7 +374,7 @@ table.grid tbody tr:hover{background:#f7fafd}
           <input type="checkbox" id="impUpdate"> 学号已存在时更新其姓名 / 专业 / 学业成绩
         </label>
         <span class="imp-lab" style="margin-left:auto">
-          <input type="file" id="impFile" accept=".csv,.txt,.json" style="font-size:12px"> 从文件读取
+          <input type="file" id="impFile" accept=".csv,.txt" style="font-size:12px"> 从文件读取
         </span>
       </div>
       <textarea id="impText" class="imp-text" placeholder="每行一条，逗号或制表符分隔：&#10;新生导入：学号,姓名[,专业][,学业成绩]&#10;2023010109,赵一,护理,88&#10;成绩导入：学号,成绩&#10;2023010101,92.5"></textarea>
@@ -383,11 +383,18 @@ table.grid tbody tr:hover{background:#f7fafd}
         <input type="file" id="impExcelFile" accept=".xlsx,.xls,.csv" style="font-size:12px">
         <span class="imp-tip">支持 .xlsx/.xls/.csv，自动识别「学号 / 姓名 / 专业 / 班级 / 成绩」列；也可省略表头，按列序「学号,姓名,专业,成绩」解析</span>
       </div>
+      <div class="imp-row" style="margin-top:10px;flex-wrap:wrap">
+        <span class="imp-lab">或导入 JSON 备份</span>
+        <input type="file" id="impJsonFile" accept=".json" style="font-size:12px">
+        <span class="imp-tip">支持「导出数据备份」导出的 .json 文件，可完整还原五育 / 扣分明细（含嵌套或扁平结构）</span>
+      </div>
       <div class="import-preview" id="impExcelPreview"></div>
+      <div class="import-preview" id="impJsonPreview"></div>
       <div class="imp-foot">
         <span class="imp-tip" id="impTip">导入的学号即为登录账号，初始密码统一 123456；学号支持 6~20 位。仅能导入到本人教师号下的班级。</span>
         <span style="display:flex;gap:8px">
           <button class="btn" id="btnImportExcel" disabled>从 Excel 导入</button>
+          <button class="btn" id="btnImportJson" disabled>从 JSON 导入</button>
           <button class="btn primary" id="btnImport">开始导入</button>
         </span>
       </div>
@@ -1313,23 +1320,106 @@ document.getElementById('btnImportExcel').addEventListener('click',async()=>{
 });
 
 
+// ================= 学生 JSON 备份导入 =================
+let pendingJsonRows=null;
+const JSON_STATUS=['在读','休学','退学','转学','保留学籍','毕业'];
+const jNum=(v,d=0)=>(v===undefined||v===null||v==='')?d:(Number(v)||0);
+function jArr(v){if(Array.isArray(v))return v;try{const p=JSON.parse(v||'[]');return Array.isArray(p)?p:[];}catch(e){return [];}}
+/** 与后端一致的 JSON 记录规整（支持嵌套备份格式 / 扁平格式） */
+function normalizeStudentRecord(rec){
+  const de=rec.deyu||{},zh=rec.zhiyu||{},ti=rec.tiyu||{},me=rec.meiyu||{},la=rec.laoyu||{},ko=rec.koufen||{};
+  return {
+    xh:String(rec.xh||'').trim(),
+    xm:String(rec.xm||rec.name||'').trim(),
+    zhuanye:String(rec.zhuanye||rec.major||'').trim(),
+    bj:String(rec.bj||rec.className||'').trim(),
+    status:JSON_STATUS.includes(rec.status)?rec.status:'在读',
+    zhuanye_score:jNum(rec.zhuanye_score,80),
+    deyu_sixiang:jNum(de.sixiang??rec.deyu_sixiang),
+    deyu_biaozhang:jNum(de.biaozhang??rec.deyu_biaozhang),
+    deyu_ganbu:jArr(de.ganbu??rec.deyu_ganbu),
+    deyu_rongyu:jArr(de.rongyu??rec.deyu_rongyu),
+    deyu_custom:jNum(de.custom??rec.deyu_custom),
+    zhiyu_jingsai:jNum(zh.jingsai??rec.zhiyu_jingsai),
+    zhiyu_jineng:jArr(zh.jineng??rec.zhiyu_jineng),
+    zhiyu_chuangye:jNum(zh.chuangye??rec.zhiyu_chuangye),
+    zhiyu_custom:jNum(zh.custom??rec.zhiyu_custom),
+    tiyu_chengji:jNum(ti.chengji??rec.tiyu_chengji),
+    tiyu_tice:jNum(ti.tice??rec.tiyu_tice),
+    tiyu_jiangli:jNum(ti.jiangli??rec.tiyu_jiangli),
+    tiyu_custom:jNum(ti.custom??rec.tiyu_custom),
+    meiyu_jiangli:jNum(me.jiangli??rec.meiyu_jiangli),
+    meiyu_custom:jNum(me.custom??rec.meiyu_custom),
+    laoyu_zhiyuanCishu:jNum(la.zhiyuanCishu??rec.laoyu_zhiyuanCishu),
+    laoyu_xianxue:jNum(la.xianxue??rec.laoyu_xianxue),
+    laoyu_qinshi:jNum(la.qinshi??rec.laoyu_qinshi),
+    laoyu_shehui:jNum(la.shehui??rec.laoyu_shehui),
+    laoyu_custom:jNum(la.custom??rec.laoyu_custom),
+    koufen_chufen:jNum(ko.chufen??rec.koufen_chufen),
+    koufen_richang:jNum(ko.richang??rec.koufen_richang)
+  };
+}
+function showJsonPreview(rows){
+  const el=document.getElementById('impJsonPreview');
+  if(!rows.length){el.innerHTML='<span class="bad">未识别到有效学生记录（需为对象数组，每条含「学号」）</span>';return;}
+  let html='识别到 <b>'+rows.length+'</b> 名学生（JSON 全量导入：含五育 / 扣分明细）';
+  html+='<div class="previewlist"><table><tr><th>学号</th><th>姓名</th><th>专业</th><th>班级</th><th>专业成绩</th></tr>';
+  rows.slice(0,12).forEach(s=>{
+    html+='<tr><td>'+esc(s.xh)+'</td><td>'+esc(s.xm)+'</td><td>'+esc(s.zhuanye)+'</td><td>'+esc(s.bj)+'</td><td>'+(s.zhuanye_score===''?'':s.zhuanye_score)+'</td></tr>';
+  });
+  if(rows.length>12)html+='<tr><td colspan="5">…共 '+rows.length+' 名</td></tr>';
+  html+='</table></div>';
+  el.innerHTML=html;
+}
+document.getElementById('impJsonFile').addEventListener('change',async e=>{
+  const f=e.target.files[0];
+  e.target.value='';
+  if(!f)return;
+  const el=document.getElementById('impJsonPreview');
+  el.innerHTML='<span class="hint">正在解析 '+esc(f.name)+' …</span>';
+  try{
+    const text=await f.text();
+    const data=JSON.parse(text);
+    const arr=Array.isArray(data)?data:(Array.isArray(data.students)?data.students:null);
+    if(!arr){throw new Error('JSON 需为对象数组');}
+    const parsed=arr.map(normalizeStudentRecord).filter(r=>r.xh);
+    pendingJsonRows=parsed;
+    showJsonPreview(parsed);
+    document.getElementById('btnImportJson').disabled=parsed.length===0;
+  }catch(err){
+    pendingJsonRows=null;
+    document.getElementById('btnImportJson').disabled=true;
+    el.innerHTML='<span class="bad">解析失败：'+esc(err.message)+'</span>';
+  }
+});
+document.getElementById('btnImportJson').addEventListener('click',async()=>{
+  if(!pendingJsonRows||!pendingJsonRows.length){toast('请先选择 JSON 备份文件','err');return;}
+  const teacher=document.getElementById('impTeacher').value.trim()||USER.account;
+  const cls=document.getElementById('impClass').value.trim();
+  const btn=document.getElementById('btnImportJson');
+  btn.disabled=true;
+  const r=await apiPost('/api/teacher/import',{
+    teacher_account:teacher,
+    class_name:cls,
+    major:document.getElementById('impMajor').value.trim(),
+    grade:document.getElementById('impGrade').value.trim(),
+    update_existing:document.getElementById('impUpdate').checked,
+    json:pendingJsonRows
+  });
+  if(applyImportResult(r)){
+    pendingJsonRows=null;
+    document.getElementById('impJsonPreview').innerHTML='';
+  }
+  btn.disabled=false;
+});
+
 // 从文件读取名单 / 成绩
 document.getElementById('impFile').addEventListener('change',e=>{
   const f=e.target.files[0];
   if(!f)return;
   const reader=new FileReader();
   reader.onload=()=>{
-    // 兼容备份 JSON：还原成 学号,姓名,专业,成绩 文本
-    let text=String(reader.result||'');
-    if(/\.json$/i.test(f.name)){
-      try{
-        const arr=JSON.parse(text);
-        if(Array.isArray(arr)){
-          text=arr.map(s=>[s.xh,s.xm,s.zhuanye,s.zhuanye_score].join(',')).join('\n');
-          document.getElementById('impUpdate').checked=true;
-        }
-      }catch(err){toast('备份文件解析失败','err');return;}
-    }
+    const text=String(reader.result||'');
     document.getElementById('impText').value=text;
     toast('已读取文件 '+f.name,'ok');
   };

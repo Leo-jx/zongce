@@ -143,6 +143,147 @@ function parseImportRows(csv) {
     .filter(cols => cols[0] && !/^学号/.test(cols[0]));
 }
 
+const num = (v, def = 0) => (v === undefined || v === null || v === '') ? def : (Number(v) || 0);
+function arr(v) { return Array.isArray(v) ? v : []; }
+
+/**
+ * 将一条 JSON 学生记录（兼容「导出备份」的嵌套格式与扁平格式）规整为 students 表字段。
+ * 备份格式：{xh,xm,zhuanye,bj,status,zhuanye_score,
+ *   deyu:{sixiang,biaozhang,ganbu[],rongyu[],custom},
+ *   zhiyu:{jingsai,jineng[],chuangye,custom},
+ *   tiyu:{chengji,tice,jiangli,custom},
+ *   meiyu:{jiangli,custom},
+ *   laoyu:{zhiyuanCishu,xianxue,qinshi,shehui,custom},
+ *   koufen:{chufen,richang}}
+ * 扁平格式（直接给出字段名）：xh,xm,zhuanye,bj,status,zhuanye_score,deyu_sixiang,… 均可。
+ */
+function normalizeStudentRecord(rec) {
+  const r = {};
+  r.xh = String(rec.xh || '').trim();
+  r.xm = String(rec.xm || rec.name || '').trim();
+  r.zhuanye = String(rec.zhuanye || rec.major || '').trim();
+  r.bj = String(rec.bj || rec.className || '').trim();
+  r.status = STUDENT_STATUS_ALLOWED.includes(rec.status) ? rec.status : '在读';
+  r.zhuanye_score = num(rec.zhuanye_score, 80);
+  const de = rec.deyu || {};
+  r.deyu_sixiang = num(de.sixiang ?? rec.deyu_sixiang);
+  r.deyu_biaozhang = num(de.biaozhang ?? rec.deyu_biaozhang);
+  r.deyu_ganbu = JSON.stringify(arr(de.ganbu ?? jsonSafe(rec.deyu_ganbu)));
+  r.deyu_rongyu = JSON.stringify(arr(de.rongyu ?? jsonSafe(rec.deyu_rongyu)));
+  r.deyu_custom = num(de.custom ?? rec.deyu_custom);
+  const zh = rec.zhiyu || {};
+  r.zhiyu_jingsai = num(zh.jingsai ?? rec.zhiyu_jingsai);
+  r.zhiyu_jineng = JSON.stringify(arr(zh.jineng ?? jsonSafe(rec.zhiyu_jineng)));
+  r.zhiyu_chuangye = num(zh.chuangye ?? rec.zhiyu_chuangye);
+  r.zhiyu_custom = num(zh.custom ?? rec.zhiyu_custom);
+  const ti = rec.tiyu || {};
+  r.tiyu_chengji = num(ti.chengji ?? rec.tiyu_chengji);
+  r.tiyu_tice = num(ti.tice ?? rec.tiyu_tice);
+  r.tiyu_jiangli = num(ti.jiangli ?? rec.tiyu_jiangli);
+  r.tiyu_custom = num(ti.custom ?? rec.tiyu_custom);
+  const me = rec.meiyu || {};
+  r.meiyu_jiangli = num(me.jiangli ?? rec.meiyu_jiangli);
+  r.meiyu_custom = num(me.custom ?? rec.meiyu_custom);
+  const la = rec.laoyu || {};
+  r.laoyu_zhiyuanCishu = num(la.zhiyuanCishu ?? rec.laoyu_zhiyuanCishu);
+  r.laoyu_xianxue = num(la.xianxue ?? rec.laoyu_xianxue);
+  r.laoyu_qinshi = num(la.qinshi ?? rec.laoyu_qinshi);
+  r.laoyu_shehui = num(la.shehui ?? rec.laoyu_shehui);
+  r.laoyu_custom = num(la.custom ?? rec.laoyu_custom);
+  const ko = rec.koufen || {};
+  r.koufen_chufen = num(ko.chufen ?? rec.koufen_chufen);
+  r.koufen_richang = num(ko.richang ?? rec.koufen_richang);
+  return r;
+}
+function jsonSafe(v) { try { const p = JSON.parse(v || '[]'); return Array.isArray(p) ? p : []; } catch (e) { return []; } }
+
+/** JSON 全量导入：按备份格式还原学生及其五育 / 扣分明细（覆盖式写入） */
+async function importJson(d, ctx, env) {
+  const { db } = ctx;
+  const teacherAccount = (ctx.user.role === 'admin' && d.teacher_account) ? d.teacher_account : ctx.user.account;
+  const teacher = await db.queryOne('SELECT account, name FROM users WHERE account = ? AND role = ?', [teacherAccount, 'teacher']);
+  if (!teacher) return fail('教师号不存在：' + teacherAccount, 400, env);
+
+  const records = (d.json || []).map(normalizeStudentRecord).filter(r => r.xh);
+  if (!records.length) return fail('没有可导入的数据', 400, env);
+
+  const updateExisting = !!d.update_existing;
+  const hash = bcrypt.hashSync(DEFAULT_STUDENT_PASSWORD, 10);
+  const created = [], updated = [], skipped = [];
+
+  for (const r of records) {
+    const className = r.bj || String(d.class_name || '').trim();
+    const major = r.zhuanye || String(d.major || '').trim();
+    const grade = String(d.grade || '').trim();
+
+    // 班级：以记录自带 bj 优先，否则用表单班级；找不到则新建（归属当前教师）
+    let cls = null;
+    if (className) {
+      cls = await db.queryOne('SELECT * FROM classes WHERE name = ?', [className]);
+      if (!cls) {
+        const ins = await db.insert(
+          'INSERT INTO classes (name, teacher_account, major, grade, created_at) VALUES (?, ?, ?, ?, ?)',
+          [className, teacherAccount, major, grade, now()]
+        );
+        cls = { id: ins.insertId, name: className, teacher_account: teacherAccount };
+      } else if (cls.teacher_account !== teacherAccount && ctx.user.role !== 'admin') {
+        skipped.push({ xh: r.xh, reason: '班级「' + className + '」归属其他辅导员' }); continue;
+      }
+    }
+
+    const existed = await db.queryOne('SELECT id, fdy, class_id FROM students WHERE xh = ?', [r.xh]);
+    if (existed) {
+      if (!updateExisting) { skipped.push({ xh: r.xh, reason: '学号已存在' }); continue; }
+      if (ctx.user.role !== 'admin' && existed.fdy !== teacherAccount) {
+        skipped.push({ xh: r.xh, reason: '该生不属于本人班级' }); continue;
+      }
+      const params = [
+        r.xm, r.zhuanye, r.bj || (cls ? cls.name : ''), r.status, r.zhuanye_score,
+        r.deyu_sixiang, r.deyu_biaozhang, r.deyu_ganbu, r.deyu_rongyu, r.deyu_custom,
+        r.zhiyu_jingsai, r.zhiyu_jineng, r.zhiyu_chuangye, r.zhiyu_custom,
+        r.tiyu_chengji, r.tiyu_tice, r.tiyu_jiangli, r.tiyu_custom,
+        r.meiyu_jiangli, r.meiyu_custom,
+        r.laoyu_zhiyuanCishu, r.laoyu_xianxue, r.laoyu_qinshi, r.laoyu_shehui, r.laoyu_custom,
+        r.koufen_chufen, r.koufen_richang,
+        existed.fdy || teacherAccount, cls ? cls.id : existed.class_id, r.xh
+      ];
+      await db.update(`UPDATE students SET xm=?,zhuanye=?,bj=?,status=?,zhuanye_score=?,
+        deyu_sixiang=?,deyu_biaozhang=?,deyu_ganbu=?,deyu_rongyu=?,deyu_custom=?,
+        zhiyu_jingsai=?,zhiyu_jineng=?,zhiyu_chuangye=?,zhiyu_custom=?,
+        tiyu_chengji=?,tiyu_tice=?,tiyu_jiangli=?,tiyu_custom=?,
+        meiyu_jiangli=?,meiyu_custom=?,
+        laoyu_zhiyuanCishu=?,laoyu_xianxue=?,laoyu_qinshi=?,laoyu_shehui=?,laoyu_custom=?,
+        koufen_chufen=?,koufen_richang=?, fdy=?, class_id=? WHERE xh=?`, params);
+      if (r.xm) await db.update('UPDATE users SET name = ? WHERE account = ? AND role = ?', [r.xm, r.xh, 'student']);
+      updated.push(r.xh);
+      continue;
+    }
+
+    if (!r.xm) { skipped.push({ xh: r.xh, reason: '缺少姓名' }); continue; }
+    if (!cls) { skipped.push({ xh: r.xh, reason: '未指定班级，无法新建' }); continue; }
+
+    await db.insert(
+      'INSERT OR IGNORE INTO users (role, account, password_hash, name, status, created_at) VALUES (?, ?, ?, ?, 1, ?)',
+      ['student', r.xh, hash, r.xm, now()]
+    );
+    await db.insert(`INSERT INTO students (xh,xm,zhuanye,bj,fdy,class_id,zhuanye_score,
+        tiyu_chengji,tiyu_tice,deyu_sixiang,deyu_biaozhang,deyu_ganbu,deyu_rongyu,deyu_custom,
+        zhiyu_jingsai,zhiyu_jineng,zhiyu_chuangye,zhiyu_custom,tiyu_jiangli,tiyu_custom,
+        meiyu_jiangli,meiyu_custom,laoyu_zhiyuanCishu,laoyu_xianxue,laoyu_qinshi,laoyu_shehui,laoyu_custom,
+        koufen_chufen,koufen_richang,status)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [r.xh, r.xm, r.zhuanye, cls.name, teacherAccount, cls.id, r.zhuanye_score,
+        r.tiyu_chengji, r.tiyu_tice, r.deyu_sixiang, r.deyu_biaozhang, r.deyu_ganbu, r.deyu_rongyu, r.deyu_custom,
+        r.zhiyu_jingsai, r.zhiyu_jineng, r.zhiyu_chuangye, r.zhiyu_custom, r.tiyu_jiangli, r.tiyu_custom,
+        r.meiyu_jiangli, r.meiyu_custom, r.laoyu_zhiyuanCishu, r.laoyu_xianxue, r.laoyu_qinshi, r.laoyu_shehui, r.laoyu_custom,
+        r.koufen_chufen, r.koufen_richang, r.status]
+    );
+    created.push(r.xh);
+  }
+
+  return ok({ class_name: String(d.class_name || '').trim(), teacher_account: teacherAccount, created, updated, skipped }, env);
+}
+
 export async function handleTeacher(path, method, ctx) {
   const { request, env, db, searchParams } = ctx;
 
@@ -218,6 +359,9 @@ export async function handleTeacher(path, method, ctx) {
   if (path === '/api/teacher/import' && method === 'POST') {
     const denied = requirePerm(ctx, 'student:write'); if (denied) return denied;
     const d = await request.json();
+
+    // JSON 全量导入（支持「导出数据备份」格式还原）
+    if (Array.isArray(d.json) && d.json.length) return importJson(d, ctx, env);
 
     // 教师号：辅导员只能用本人教师号导入，管理员可代指定
     const teacherAccount = (ctx.user.role === 'admin' && d.teacher_account) ? d.teacher_account : ctx.user.account;
