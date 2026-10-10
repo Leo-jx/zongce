@@ -97,6 +97,10 @@ table.main tbody tr:hover{background:#f7fafd}
 .dialog .foot{padding:14px 22px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end;align-items:center}
 .icon-x{background:transparent;border:0;color:var(--ink-3);font-size:18px;line-height:1;padding:4px 8px;border-radius:6px}
 .icon-x:hover{background:#f0f2f5;color:var(--ink)}
+.chk-list{max-height:46vh;overflow-y:auto;border:1px solid var(--line);border-radius:10px;padding:6px 4px;margin-top:4px}
+.chk-list label{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;cursor:pointer;font-size:13.5px}
+.chk-list label:hover{background:#f6f8fb}
+.chk-list input[type=checkbox]{width:16px;height:16px}
 
 .modgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:12px}
 .modcard{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
@@ -526,6 +530,27 @@ table.grid tbody tr:hover{background:#f7fafd}
     <div class="foot">
       <button class="btn" id="classEditCancel">取消</button>
       <button class="btn primary" id="classEditSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="backupOverlay">
+  <div class="dialog">
+    <div class="head">
+      <h2>选择导出班级（可多选）</h2>
+      <button class="icon-x" id="backupClose" aria-label="关闭">×</button>
+    </div>
+    <div class="body">
+      <div class="imp-row" style="margin-bottom:6px">
+        <button class="btn" id="backupSelAll">全选</button>
+        <button class="btn" id="backupSelNone">取消全选</button>
+        <span class="imp-tip">不选任何班级将导出全部学生</span>
+      </div>
+      <div id="backupClassList" class="chk-list"></div>
+    </div>
+    <div class="foot">
+      <button class="btn" id="backupCancel">取消</button>
+      <button class="btn primary" id="backupConfirm">导出选中班级</button>
     </div>
   </div>
 </div>
@@ -1583,9 +1608,8 @@ document.getElementById('btnExportPersonal').addEventListener('click',()=>{
   exportPersonalDocx(ids.length?studentsData.filter(s=>ids.indexOf(s.id)>=0):[]);
 });
 
-document.getElementById('btnBackup').addEventListener('click',()=>{
-  if(!studentsData.length){toast('暂无学生数据','err');return;}
-  const data=studentsData.map(s=>({
+function buildBackupData(list){
+  return list.map(s=>({
     xh:s.xh,xm:s.xm,zhuanye:s.zhuanye,bj:s.bj,status:s.status||'在读',zhuanye_score:s.zhuanye_score,
     deyu:{sixiang:s.deyu_sixiang,biaozhang:s.deyu_biaozhang,ganbu:safeArr(s.deyu_ganbu),rongyu:safeArr(s.deyu_rongyu),custom:s.deyu_custom},
     zhiyu:{jingsai:s.zhiyu_jingsai,jineng:safeArr(s.zhiyu_jineng),chuangye:s.zhiyu_chuangye,custom:s.zhiyu_custom},
@@ -1595,8 +1619,36 @@ document.getElementById('btnBackup').addEventListener('click',()=>{
     koufen:{chufen:s.koufen_chufen,richang:s.koufen_richang},
     zongce:Number(s.zongceScore.toFixed(2))
   }));
+}
+function doBackupExport(list){
+  if(!list.length){toast('当前选择没有可导出的学生','err');return;}
+  const data=buildBackupData(list);
   downloadFile('综测数据备份_'+stamp()+'.json',JSON.stringify(data,null,2),'application/json');
-  toast('已导出数据备份','ok');
+  toast('已导出学生数据备份（'+list.length+' 人）','ok');
+}
+// 导出弹窗：按班级多选导出
+function openBackupDialog(){
+  if(!studentsData.length){toast('暂无学生数据','err');return;}
+  const classes=[...new Set(studentsData.map(s=>(s.bj||'').trim()).filter(Boolean))].sort();
+  const box=document.getElementById('backupClassList');
+  if(!classes.length){
+    box.innerHTML='<div class="hint">当前学生均未分配班级，将直接导出全部。</div>';
+  }else{
+    box.innerHTML=classes.map(c=>`<label><input type="checkbox" class="bkc" value="${esc(c)}" checked>${esc(c)}</label>`).join('');
+  }
+  document.getElementById('backupOverlay').classList.add('open');
+}
+document.getElementById('btnBackup').addEventListener('click',openBackupDialog);
+document.getElementById('backupClose').addEventListener('click',()=>document.getElementById('backupOverlay').classList.remove('open'));
+document.getElementById('backupCancel').addEventListener('click',()=>document.getElementById('backupOverlay').classList.remove('open'));
+document.getElementById('backupOverlay').addEventListener('click',e=>{if(e.target===document.getElementById('backupOverlay'))document.getElementById('backupOverlay').classList.remove('open');});
+document.getElementById('backupSelAll').addEventListener('click',()=>document.querySelectorAll('#backupClassList .bkc').forEach(c=>c.checked=true));
+document.getElementById('backupSelNone').addEventListener('click',()=>document.querySelectorAll('#backupClassList .bkc').forEach(c=>c.checked=false));
+document.getElementById('backupConfirm').addEventListener('click',()=>{
+  const checked=[...document.querySelectorAll('#backupClassList .bkc:checked')].map(c=>c.value);
+  const list=checked.length?studentsData.filter(s=>checked.includes((s.bj||'').trim())):studentsData;
+  document.getElementById('backupOverlay').classList.remove('open');
+  doBackupExport(list);
 });
 function safeArr(v){try{const p=JSON.parse(v||'[]');return Array.isArray(p)?p:[];}catch(e){return [];}}
 
