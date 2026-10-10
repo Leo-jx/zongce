@@ -160,6 +160,7 @@ table.grid tbody tr:hover{background:#f7fafd}
         <select id="stuClassFilter"><option value="">全部班级</option></select>
         <button class="btn" id="btnSearchStudent">查询</button>
         <button class="btn primary" id="btnAddStudent">新增学生</button>
+        <button class="btn" id="btnExportScores" style="margin-left:auto">一键导出各年级各专业综测成绩</button>
       </div>
       <div class="tblwrap" style="margin-top:12px"><table class="grid" id="studentTable"></table></div>
     </div>
@@ -214,6 +215,25 @@ table.grid tbody tr:hover{background:#f7fafd}
 <script src="config.js"></script>
 <script src="auth.js"></script>
 <script src="password.js"></script>
+<script src="score.js"></script>
+<!-- 压缩组件：双源加载（用于导出各年级各专业综测成绩 xlsx） -->
+<script>
+(function(){
+  var libs=[
+    'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
+  ];
+  function tryLoad(i){
+    if(i>=libs.length){window.__jszipFailed=true;return;}
+    var s=document.createElement('script');
+    s.src=libs[i];
+    s.onload=function(){try{window.dispatchEvent(new Event('jszipready'));}catch(e){}};
+    s.onerror=function(){tryLoad(i+1);};
+    document.head.appendChild(s);
+  }
+  tryLoad(0);
+})();
+</script>
 <script>
 const API = window.API_BASE || '';
 let TOKEN = '', USER = null, PERMS = [];
@@ -477,6 +497,96 @@ async function loadStudents(){
     toast(r2.msg,r2.code===0?'ok':'err');loadStudents();
   });
 }
+
+/* ============ 超级管理员：一键导出各年级各专业综测成绩 ============ */
+function stamp(){const d=new Date();const p=n=>String(n).padStart(2,'0');return d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+p(d.getHours())+p(d.getMinutes())+p(d.getSeconds());}
+const SCORE_HEAD=['年级','专业','班级','学号','姓名','辅导员','学业成绩','德育(20%)','智育(50%)','体育(10%)','美育(10%)','劳育(10%)','扣分','综测总分','年级专业排名'];
+
+function scoreRow(s){
+  const st=ZCScore.toStudent(s);
+  const de=ZCScore.calcDeyu(st),zhi=ZCScore.calcZhiyu(st),ti=ZCScore.calcTiyu(st),mei=ZCScore.calcMeiyu(st),lao=ZCScore.calcLaoyu(st),ko=ZCScore.calcKoufen(st);
+  const total=Math.max(0,de*0.20+zhi*0.50+ti*0.10+mei*0.10+lao*0.10+ko);
+  return [s.grade||'',s.zhuanye||'',s.bj||'',s.xh,s.xm,s.fdy||'',s.zhuanye_score,de,zhi,ti,mei,lao,ko,Math.round(total*100)/100,0];
+}
+function rankByGroup(list){
+  const groups={};
+  list.forEach(s=>{const k=(s[0]||'未分年级')+'|'+(s[1]||'未分专业');(groups[k]=groups[k]||[]).push(s);});
+  Object.values(groups).forEach(g=>{
+    g.sort((a,b)=>b[13]-a[13]);
+    g.forEach((s,i)=>s[14]=i+1);
+  });
+}
+function colLetter(n){let s='';while(n>0){const m=(n-1)%26;s=String.fromCharCode(65+m)+s;n=Math.floor((n-1)/26);}return s;}
+function xmlEsc(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function xmlCell(ref,val,isHeader){
+  if(typeof val==='number'&&isFinite(val))return '<c r="'+ref+'"'+(isHeader?' s="1"':'')+'><v>'+val+'</v></c>';
+  return '<c r="'+ref+'"'+(isHeader?' s="1"':'')+' t="inlineStr"><is><t xml:space="preserve">'+xmlEsc(val)+'</t></is></c>';
+}
+function sheetXml(rows){
+  let xml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>';
+  rows.forEach((row,ri)=>{
+    xml+='<row r="'+(ri+1)+'">';
+    row.forEach((val,ci)=>{xml+=xmlCell(colLetter(ci+1)+(ri+1),val,ri===0);});
+    xml+='</row>';
+  });
+  return xml+'</sheetData></worksheet>';
+}
+function buildXlsx(sheets){
+  const ct='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'+
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'+
+    '<Default Extension="xml" ContentType="application/xml"/>'+
+    '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'+
+    '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'+
+    sheets.map((sh,i)=>'<Override PartName="/xl/worksheets/sheet'+(i+1)+'.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>').join('')+
+    '</Types>';
+  const rootRels='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>';
+  const wbSheets=sheets.map((sh,i)=>'<sheet name="'+xmlEsc(sh.name)+'" sheetId="'+(i+1)+'" r:id="rId'+(i+1)+'"/>').join('');
+  const wb='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>'+wbSheets+'</sheets></workbook>';
+  let wbRels='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">';
+  sheets.forEach((sh,i)=>{wbRels+='<Relationship Id="rId'+(i+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+(i+1)+'.xml"/>';});
+  wbRels+='<Relationship Id="rId'+(sheets.length+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>';
+  const styles='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+    '<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>'+
+    '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>'+
+    '<borders count="1"><border/></borders>'+
+    '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'+
+    '<cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs>'+
+    '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+  const zip=new JSZip();
+  zip.file('[Content_Types].xml',ct);
+  zip.file('_rels/.rels',rootRels);
+  zip.file('xl/workbook.xml',wb);
+  zip.file('xl/_rels/workbook.xml.rels',wbRels);
+  zip.file('xl/styles.xml',styles);
+  sheets.forEach((sh,i)=>zip.file('xl/worksheets/sheet'+(i+1)+'.xml',sheetXml(sh.rows)));
+  return zip.generateAsync({type:'blob'});
+}
+function safeName(n){return (n||'').replace(/[\\/:*?"<>|]/g,'_').slice(0,31);}
+async function exportAdminScores(){
+  if(typeof JSZip==='undefined'){toast('文档导出组件未加载（需联网加载 JSZip），请稍后重试','err');return;}
+  const btn=document.getElementById('btnExportScores');btn.disabled=true;
+  try{
+    const r=await apiGet('/api/teacher/students');
+    if(r.code!==0){toast(r.msg,'err');return;}
+    if(!r.data.length){toast('暂无学生数据','err');return;}
+    const rows=r.data.map(s=>{const row=scoreRow(s);row._total=row[13];return row;});
+    rankByGroup(rows);
+    const allSorted=rows.slice().sort((a,b)=>String(a[0]).localeCompare(String(b[0]))||String(a[1]).localeCompare(String(b[1]))||b[13]-a[13]);
+    const sheets=[{name:'全部',rows:[SCORE_HEAD].concat(allSorted.map(s=>s.slice(0,15)))}];
+    const groups={};
+    rows.forEach(s=>{const k=(s[0]||'未分年级')+' - '+(s[1]||'未分专业');(groups[k]=groups[k]||[]).push(s);});
+    Object.keys(groups).sort().forEach(k=>{
+      const g=groups[k].sort((a,b)=>b[13]-a[13]);
+      sheets.push({name:safeName(k),rows:[SCORE_HEAD].concat(g.map(s=>s.slice(0,15)))});
+    });
+    const blob=await buildXlsx(sheets);
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='各年级各专业综测成绩_'+stamp()+'.xlsx';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(a.href);
+    toast('已导出各年级各专业综测成绩（'+rows.length+' 人，'+(sheets.length-1)+' 个年级专业分组）','ok');
+  }catch(e){toast('导出失败：'+((e&&e.message)||e),'err');}
+  finally{btn.disabled=false;}
+}
+document.getElementById('btnExportScores').addEventListener('click',exportAdminScores);
 
 /* ============ 账号 ============ */
 async function loadAccounts(){
