@@ -368,6 +368,7 @@ table.grid tbody tr:hover{background:#f7fafd}
         <input id="impTeacher" class="imp-input" placeholder="如 T001">
         <span class="imp-lab">导入班级</span>
         <input id="impClass" class="imp-input" placeholder="如 护理2301">
+        <span class="imp-tip">Excel 含「班级」列时可留空，按列自动建班</span>
         <span class="imp-lab">专业</span>
         <input id="impMajor" class="imp-input" placeholder="如 护理">
         <span class="imp-lab">年级</span>
@@ -385,7 +386,7 @@ table.grid tbody tr:hover{background:#f7fafd}
       <div class="imp-row" style="margin-top:10px;flex-wrap:wrap">
         <span class="imp-lab">或导入 Excel 名单</span>
         <input type="file" id="impExcelFile" accept=".xlsx,.xls,.csv" style="font-size:12px">
-        <span class="imp-tip">支持 .xlsx/.xls/.csv，自动识别「学号 / 姓名 / 专业 / 班级 / 成绩」列；也可省略表头，按列序「学号,姓名,专业,成绩」解析</span>
+        <span class="imp-tip">支持 .xlsx/.xls/.csv，自动识别「学号 / 姓名 / 专业 / 班级 / 成绩」列；也可省略表头，按列序「学号,姓名,专业,成绩」解析。若 Excel 含「班级」列，将按该列逐生归入对应班级并<b>自动建班</b>（归属本人），此时下方「导入班级」可留空；无班级列时仍需填写。</span>
       </div>
       <div class="imp-row" style="margin-top:10px;flex-wrap:wrap">
         <span class="imp-lab">或导入 JSON 备份</span>
@@ -1326,7 +1327,9 @@ document.getElementById('btnImportExcel').addEventListener('click',async()=>{
   if(!pendingRosterRows||!pendingRosterRows.length){toast('请先选择 Excel 名单文件','err');return;}
   const teacher=document.getElementById('impTeacher').value.trim()||USER.account;
   const cls=document.getElementById('impClass').value.trim();
-  if(!cls){toast('请填写导入班级','err');return;}
+  // 表单未填班级时，要求 Excel 含「班级」列，否则无法建班
+  const hasBj=pendingRosterRows.some(r=>r.bj);
+  if(!cls && !hasBj){toast('请填写「导入班级」，或确保 Excel 含「班级」列','err');return;}
   const btn=document.getElementById('btnImportExcel');
   btn.disabled=true;
   const r=await apiPost('/api/teacher/import',{

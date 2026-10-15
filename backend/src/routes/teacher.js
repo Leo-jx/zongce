@@ -373,35 +373,34 @@ export async function handleTeacher(path, method, ctx) {
 
     // update_existing：学号已存在时更新姓名 / 专业 / 学业成绩（用于批量导入成绩）
     const updateExisting = !!d.update_existing;
-    const className = String(d.class_name || (rows.find(r => r.bj) || {}).bj || '').trim();
-
-    // 找到或创建班级，并校验归属；「仅按学号更新已有学生」时允许不填班级
-    let cls = null;
-    if (className) {
-      cls = await db.queryOne('SELECT * FROM classes WHERE name = ?', [className]);
-      if (!cls) {
-        const r = await db.insert(
-          'INSERT INTO classes (name, teacher_account, major, grade, created_at) VALUES (?, ?, ?, ?, ?)',
-          [className, teacherAccount, d.major || '', d.grade || '', now()]
-        );
-        cls = { id: r.insertId, name: className, teacher_account: teacherAccount, grade: d.grade || '' };
-      } else {
-        if (cls.teacher_account !== teacherAccount) {
-          return fail(`班级「${className}」归属其他辅导员（${cls.teacher_account}）`, 403, env);
-        }
-        // 导入时若显式给出年级，则同步更新班级年级（首次导入或后续修正）
-        if (d.grade && cls.grade !== d.grade) {
-          await db.update('UPDATE classes SET grade = ? WHERE id = ?', [d.grade, cls.id]);
-        }
-      }
-    } else if (!updateExisting) {
-      return fail('请指定班级名称', 400, env);
-    }
-
     const hash = bcrypt.hashSync(DEFAULT_STUDENT_PASSWORD, 10);
     const created = [];
     const updated = [];
     const skipped = [];
+    const classNames = new Set();
+
+    // 按班级名缓存「找到或创建」的结果，避免每行重复查库。
+    // Excel / CSV 含「班级」列时，每个学生归入各自班级，班级不存在则自动创建。
+    const classCache = {};
+    async function resolveClass(name, major, grade) {
+      name = String(name || '').trim();
+      if (!name) return null;
+      if (classCache[name] !== undefined) return classCache[name];
+      let c = await db.queryOne('SELECT * FROM classes WHERE name = ?', [name]);
+      if (!c) {
+        const r = await db.insert(
+          'INSERT INTO classes (name, teacher_account, major, grade, created_at) VALUES (?, ?, ?, ?, ?)',
+          [name, teacherAccount, major || '', grade || '', now()]
+        );
+        c = { id: r.insertId, name, teacher_account: teacherAccount, grade: grade || '' };
+      } else if (ctx.user.role !== 'admin' && c.teacher_account !== teacherAccount) {
+        const err = { error: '班级「' + name + '」归属其他辅导员（' + c.teacher_account + '）' };
+        classCache[name] = err; return err;
+      } else if (grade && c.grade !== grade) {
+        await db.update('UPDATE classes SET grade = ? WHERE id = ?', [grade, c.id]);
+      }
+      classCache[name] = c; return c;
+    }
 
     for (const row of rows) {
       const xh = String(row.xh || row[0] || '').trim();
@@ -413,28 +412,42 @@ export async function handleTeacher(path, method, ctx) {
       const score = rawScore === undefined || rawScore === null || rawScore === ''
         ? 80 : (Number(rawScore) || 0);
 
-      const existed = await db.queryOne('SELECT id, fdy FROM students WHERE xh = ?', [xh]);
+      // 班级优先级：Excel/CSV 的「班级」列 → 表单「导入班级」；专业 / 年级同理
+      const cn = String(row.bj || d.class_name || '').trim();
+      const mj = String(row.zhuanye || d.major || '').trim();
+      const gd = String(row.nj || row.grade || d.grade || '').trim();
+
+      const existed = await db.queryOne('SELECT id, fdy, class_id, bj FROM students WHERE xh = ?', [xh]);
       if (existed) {
         if (!updateExisting) { skipped.push({ xh, reason: '学号已存在' }); continue; }
         if (ctx.user.role !== 'admin' && existed.fdy !== teacherAccount) {
           skipped.push({ xh, reason: '该生不属于本人班级' }); continue;
         }
-        const zhuanye = String(row.zhuanye || row[2] || d.major || '').trim();
         const sets = ['zhuanye_score = ?'];
         const params = [score];
         if (xm) { sets.push('xm = ?'); params.push(xm); }
-        if (zhuanye) { sets.push('zhuanye = ?'); params.push(zhuanye); }
+        if (mj) { sets.push('zhuanye = ?'); params.push(mj); }
+        // 若提供了班级且能归属，则同步更新班级归属
+        let cls = null;
+        if (cn) {
+          cls = await resolveClass(cn, mj, gd);
+          if (cls && cls.error) { skipped.push({ xh, reason: cls.error.error }); continue; }
+          if (cls) { sets.push('bj = ?', 'class_id = ?', 'fdy = ?'); params.push(cls.name, cls.id, teacherAccount); }
+        }
         params.push(xh);
         await db.update('UPDATE students SET ' + sets.join(', ') + ' WHERE xh = ?', params);
         if (xm) await db.update('UPDATE users SET name = ? WHERE account = ? AND role = ?', [xm, xh, 'student']);
+        if (cls) classNames.add(cls.name);
         updated.push(xh);
         continue;
       }
 
       if (!xm) { skipped.push({ xh, reason: '新生缺少姓名' }); continue; }
+      const cls = await resolveClass(cn, mj, gd);
+      if (cls && cls.error) { skipped.push({ xh, reason: cls.error.error }); continue; }
       if (!cls) { skipped.push({ xh, reason: '未指定班级，无法新建学生' }); continue; }
+      classNames.add(cls.name);
 
-      const zhuanye = String(row.zhuanye || row[2] || d.major || '').trim();
       // 学号即账号，初始密码统一 123456
       await db.insert(
         'INSERT OR IGNORE INTO users (role, account, password_hash, name, status, created_at) VALUES (?, ?, ?, ?, 1, ?)',
@@ -443,12 +456,15 @@ export async function handleTeacher(path, method, ctx) {
       await db.insert(
         `INSERT INTO students (xh, xm, zhuanye, bj, fdy, class_id, zhuanye_score, deyu_ganbu, deyu_rongyu, zhiyu_jineng)
          VALUES (?, ?, ?, ?, ?, ?, ?, '[]', '[]', '[]')`,
-        [xh, xm, zhuanye, className, teacherAccount, cls.id, score]
+        [xh, xm, mj, cls.name, teacherAccount, cls.id, score]
       );
       created.push(xh);
     }
 
-    return ok({ class_id: cls ? cls.id : null, class_name: className, teacher_account: teacherAccount, created, updated, skipped }, env);
+    return ok({
+      class_name: Array.from(classNames).join('、') || String(d.class_name || '').trim() || '（仅更新，未建班）',
+      teacher_account: teacherAccount, created, updated, skipped
+    }, env);
   }
 
   // ===================== 教学计划库（全院辅导员共用） =====================
