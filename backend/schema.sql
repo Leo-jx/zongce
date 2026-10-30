@@ -150,3 +150,12 @@ CREATE TABLE user_permissions (
   granted INTEGER NOT NULL DEFAULT 1,
   PRIMARY KEY (user_id, permission_key)
 );
+
+-- AI 综测咨询知识库：测评办法分块 + 向量化结果（首次问答时由内置 knowledge.json 自动写入）
+CREATE TABLE IF NOT EXISTS ai_chunks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL DEFAULT '',
+  content TEXT NOT NULL,
+  embedding TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL DEFAULT ''
+);

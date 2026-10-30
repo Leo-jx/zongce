@@ -12,6 +12,7 @@ import { handleLogin, handleChangePassword } from './routes/auth.js';
 import { handleStudent } from './routes/student.js';
 import { handleTeacher } from './routes/teacher.js';
 import { handleAdmin } from './routes/admin.js';
+import { handleAi } from './routes/ai.js';
 import { handleUpload, handleFileDownload } from './routes/files.js';
 
 export default {
@@ -65,6 +66,11 @@ export default {
       if (path.startsWith('/api/admin/')) {
         if (account.role !== 'admin') return fail('无权限', 403, env);
         return (await handleAdmin(path, method, ctx)) || notFound(env);
+      }
+
+      // AI 综测咨询：三种角色均可提问，路由内部再细分权限
+      if (path.startsWith('/api/ai/')) {
+        return (await handleAi(path, method, ctx)) || notFound(env);
       }
 
       if (path === '/api/upload') {
