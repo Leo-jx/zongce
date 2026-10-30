@@ -46,18 +46,35 @@ function cosine(a, b) {
   return dot / (Math.sqrt(na) * Math.sqrt(nb) || 1);
 }
 
-/** 知识库为空时，用内置分块自动初始化（向量化后写入 D1） */
+/** 知识库为空时，用内置分块自动初始化（向量化后写入 D1）；Embedding 配额不足时降级为关键词检索 */
 async function ensureKnowledge(db, env) {
   const row = await db.queryOne('SELECT COUNT(*) AS n FROM ai_chunks');
   if (row && Number(row.n) > 0) return Number(row.n);
-  const vectors = await embedTexts(env, knowledge.map(c => c.title + '\n' + c.content));
+  let vectors = null;
+  try {
+    vectors = await embedTexts(env, knowledge.map(c => c.title + '\n' + c.content));
+  } catch (e) {
+    // embedding-2 需单独的资源包/余额；失败不阻塞初始化，检索自动降级为关键词匹配
+    console.log('knowledge embed failed, fallback to keyword mode:', e.message);
+  }
   for (let i = 0; i < knowledge.length; i++) {
     await db.insert(
       'INSERT INTO ai_chunks (title, content, embedding, created_at) VALUES (?, ?, ?, ?)',
-      [knowledge[i].title, knowledge[i].content, JSON.stringify(vectors[i]), now()]
+      [knowledge[i].title, knowledge[i].content, JSON.stringify(vectors ? vectors[i] : []), now()]
     );
   }
   return knowledge.length;
+}
+
+/** 关键词检索降级：问题与分块的二元组（bigram）重合度打分 */
+function keywordScore(question, text) {
+  const q = String(question).replace(/[\s，。？！、：；"'()（）]/g, '');
+  const grams = new Set();
+  for (let i = 0; i < q.length - 1; i++) grams.add(q.slice(i, i + 2));
+  if (!grams.size) return 0;
+  let hit = 0;
+  for (const g of grams) if (text.indexOf(g) >= 0) hit++;
+  return hit / grams.size;
 }
 
 /** web-search-pro 联网检索：返回 [{title, link, content}]，失败不阻塞问答 */
@@ -124,11 +141,22 @@ export async function handleAi(path, method, ctx) {
 
     await ensureKnowledge(db, env);
 
-    // 1) 问题向量化 + 余弦检索最相关条款
-    const [qv] = await embedTexts(env, [question]);
+    // 1) 检索最相关条款：优先向量余弦（Embedding 可用时），否则关键词重合度降级
+    let qv = null;
+    try {
+      qv = (await embedTexts(env, [question]))[0];
+    } catch (e) {
+      console.log('question embed failed, fallback to keyword mode:', e.message);
+    }
     const rows = await db.query('SELECT id, title, content, embedding FROM ai_chunks');
+    const hasVectors = !!qv && rows.every(r => {
+      try { return JSON.parse(r.embedding || '[]').length > 0; } catch { return false; }
+    });
     const chunks = rows
-      .map(r => ({ id: r.id, title: r.title, content: r.content, score: cosine(qv, JSON.parse(r.embedding || '[]')) }))
+      .map(r => ({
+        id: r.id, title: r.title, content: r.content,
+        score: hasVectors ? cosine(qv, JSON.parse(r.embedding)) : keywordScore(question, r.title + ' ' + r.content),
+      }))
       .sort((a, b) => b.score - a.score)
       .slice(0, TOP_K);
 
