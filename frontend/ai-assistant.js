@@ -62,6 +62,8 @@
       '.zcai-m .b pre{background:#f0f2f8;padding:8px;border-radius:8px;overflow-x:auto;font-size:12px;margin:4px 0}',
       '.zcai-li{display:block;padding-left:2px}',
       '.zcai-src{margin-top:6px;font-size:11px;color:#7a8699}',
+      '.zcai-cursor{display:inline-block;color:#4f7cff;animation:zcai-blink 1s steps(2) infinite}',
+      '@keyframes zcai-blink{50%{opacity:0}}',
       '.zcai-src b{color:#4f7cff;font-weight:600}',
       '.zcai-quick{padding:8px 12px;display:flex;flex-wrap:wrap;gap:6px;border-top:1px solid #eef1f8;background:#fff}',
       '.zcai-quick button{font-size:11px;padding:4px 9px;border-radius:999px;border:1px solid #cdd8f5;background:#f4f7ff;',
@@ -133,6 +135,21 @@
     return m;
   }
 
+  /** 渲染最终回答（含依据条款与联网参考链接） */
+  function renderFinal(tip, answer, sources, web) {
+    tip.querySelector('.b').innerHTML = md(answer) +
+      '<div class="zcai-src">依据：<b>' + (sources || []).map(function (x) { return esc(x.title); }).join('</b>、<b>') + '</b></div>' +
+      ((web || []).length ? '<div class="zcai-src">联网参考：' + web.slice(0, 3).map(function (w) {
+        return '<a href="' + esc(w.link) + '" target="_blank" rel="noopener" style="color:#4f7cff">' + esc(w.title || w.link) + '</a>';
+      }).join('、') + '</div>' : '');
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+
+  function pushHistory(q, answer) {
+    history.push({ role: 'user', content: q }, { role: 'assistant', content: answer });
+    if (history.length > 12) history = history.slice(-12);
+  }
+
   async function ask(question) {
     if (busy) return;
     var q = String(question || '').trim();
@@ -145,21 +162,51 @@
     try {
       var s = window.ZCAuth && window.ZCAuth.readSession();
       if (!s || !s.token) throw new Error('登录已失效，请重新登录');
-      var resp = await fetch((window.API_BASE || '') + '/api/ai/ask', {
+      var resp = await fetch((window.API_BASE || '') + '/api/ai/ask/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + s.token },
         body: JSON.stringify({ question: q, history: history.slice(-6), web: webChk.checked }),
       });
-      var r = await resp.json();
-      if (r.code !== 0) throw new Error(r.msg || '请求失败');
-      tip.querySelector('.b').innerHTML = md(r.data.answer) +
-        '<div class="zcai-src">依据：<b>' + (r.data.sources || []).map(function (x) { return esc(x.title); }).join('</b>、<b>') + '</b></div>' +
-        ((r.data.web || []).length ? '<div class="zcai-src">联网参考：' + r.data.web.slice(0, 3).map(function (w) {
-          return '<a href="' + esc(w.link) + '" target="_blank" rel="noopener" style="color:#4f7cff">' + esc(w.title || w.link) + '</a>';
-        }).join('、') + '</div>' : '');
-      msgs.scrollTop = msgs.scrollHeight;
-      history.push({ role: 'user', content: q }, { role: 'assistant', content: r.data.answer });
-      if (history.length > 12) history = history.slice(-12);
+      var ctype = resp.headers.get('content-type') || '';
+      // 回退：后端未升级或参数错误时返回 JSON
+      if (!resp.ok || ctype.indexOf('text/event-stream') < 0) {
+        var jr = await resp.json();
+        if (jr.code !== 0) throw new Error(jr.msg || '请求失败');
+        renderFinal(tip, jr.data.answer, jr.data.sources, jr.data.web);
+        pushHistory(q, jr.data.answer);
+        return;
+      }
+      // 流式读取 SSE：data: {"meta":...} / {"delta":"片段"} / {"done":true} / {"error":...}
+      var reader = resp.body.getReader();
+      var dec = new TextDecoder();
+      var buf = '', text = '', meta = null, done = false;
+      var body = tip.querySelector('.b');
+      for (;;) {
+        var r = await reader.read();
+        if (r.done) break;
+        buf += dec.decode(r.value, { stream: true });
+        var parts = buf.split('\n\n');
+        buf = parts.pop();
+        for (var i = 0; i < parts.length; i++) {
+          var line = parts[i].trim();
+          if (line.indexOf('data:') !== 0) continue;
+          var payload = line.slice(5).trim();
+          if (!payload || payload === '[DONE]') continue;
+          var ev;
+          try { ev = JSON.parse(payload); } catch (e) { continue; }
+          if (ev.error) throw new Error(ev.error);
+          if (ev.meta) { meta = ev.meta; continue; }
+          if (ev.delta) {
+            text += ev.delta;
+            body.innerHTML = md(text) + '<span class="zcai-cursor">▍</span>';
+            msgs.scrollTop = msgs.scrollHeight;
+          }
+          if (ev.done) done = true;
+        }
+      }
+      if (!text && !done) throw new Error('未收到回答内容');
+      renderFinal(tip, text || '（本次未生成内容，请重试）', meta && meta.sources, meta && meta.web);
+      pushHistory(q, text);
     } catch (e) {
       tip.querySelector('.b').innerHTML = '<span style="color:#c0392b">出错了：' + esc(e.message) + '</span>';
     } finally {

@@ -9,7 +9,7 @@
  *   → （可选）web-search-pro 联网检索 → glm-4-flash 依据「办法原文 + 网络参考」作答。
  */
 import knowledge from '../ai/knowledge.json';
-import { ok, fail } from '../http.js';
+import { ok, fail, corsHeaders } from '../http.js';
 import { now } from '../db.js';
 
 const ZHIPU_BASE = 'https://open.bigmodel.cn/api/paas/v4';
@@ -106,8 +106,8 @@ const SYSTEM_PROMPT = [
   '- 不编造分值；引用表格时逐项列清。回答用简体中文、分点简洁，可用 markdown。',
 ].join('\n');
 
-/** 拼装检索到的办法原文与网络参考，调用 glm-4-flash 生成回答 */
-async function askLLM(env, question, history, chunks, web) {
+/** 拼装检索到的办法原文与网络参考，构造对话消息 */
+function buildMessages(question, history, chunks, web) {
   let context = '';
   if (chunks.length) {
     context += '【测评办法原文】\n' + chunks.map((c, i) => `[片段${i + 1}] ${c.title}\n${c.content}`).join('\n\n') + '\n';
@@ -115,65 +115,172 @@ async function askLLM(env, question, history, chunks, web) {
   if (web.length) {
     context += '\n【网络检索参考】\n' + web.map((r, i) => `[网${i + 1}] ${r.title}（${r.link}）\n${r.content}`).join('\n') + '\n';
   }
-  const msgs = [
+  return [
     { role: 'system', content: SYSTEM_PROMPT + '\n\n' + (context || '（未检索到相关片段，请如实说明并给出一般性建议）') },
     ...history.slice(-6),
     { role: 'user', content: question },
   ];
+}
+
+/** 一次性生成完整回答（非流式） */
+async function askLLM(env, question, history, chunks, web) {
   const data = await zhipu(env, '/chat/completions', {
     model: CHAT_MODEL,
-    messages: msgs,
+    messages: buildMessages(question, history, chunks, web),
     temperature: 0.3,
     max_tokens: 2048,
   });
   return (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
 }
 
+/**
+ * 流式生成：把智谱 SSE（data: {choices:[{delta:{content}}]}）转写成自有事件流——
+ *   data: {"meta":{sources,web,model}}  先推送检索依据
+ *   data: {"delta":"片段"}              逐段增量文本
+ *   data: {"done":true}                 结束标记
+ *   data: {"error":"原因"}              失败时推送
+ */
+async function streamAnswer(env, writable, { question, history, chunks, web }) {
+  const writer = writable.getWriter();
+  const enc = new TextEncoder();
+  const send = obj => writer.write(enc.encode('data: ' + JSON.stringify(obj) + '\n\n'));
+  let finished = false;
+  try {
+    await send({
+      meta: {
+        sources: chunks.map(c => ({ id: c.id, title: c.title, score: Math.round(c.score * 1000) / 1000 })),
+        web, model: CHAT_MODEL,
+      },
+    });
+    const key = env.ZHIPU_API_KEY;
+    if (!key) throw new Error('服务端未配置 ZHIPU_API_KEY，请联系管理员');
+    const res = await fetch(ZHIPU_BASE + '/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+      body: JSON.stringify({
+        model: CHAT_MODEL,
+        messages: buildMessages(question, history, chunks, web),
+        temperature: 0.3,
+        max_tokens: 2048,
+        stream: true,
+      }),
+    });
+    if (!res.ok || !res.body) {
+      const t = await res.text().catch(() => '');
+      let msg = '智谱接口错误 ' + res.status;
+      try { msg += '：' + (JSON.parse(t).error && JSON.parse(t).error.message || ''); } catch { /* 忽略 */ }
+      throw new Error(msg.slice(0, 200));
+    }
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        const s = line.trim();
+        if (!s.startsWith('data:')) continue;
+        const payload = s.slice(5).trim();
+        if (!payload || payload === '[DONE]') continue;
+        try {
+          const j = JSON.parse(payload);
+          const delta = j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content;
+          if (delta) await send({ delta });
+        } catch { /* 忽略无法解析的行 */ }
+      }
+    }
+    if (!finished) { finished = true; await send({ done: true }); }
+  } catch (e) {
+    try {
+      await send({ error: e.message || '生成失败' });
+      if (!finished) { finished = true; await send({ done: true }); }
+    } catch { /* 客户端已断开 */ }
+  } finally {
+    try { await writer.close(); } catch { /* ignore */ }
+  }
+}
+
+/** 检索 + 组装问答上下文：一次性问答与流式问答共用 */
+async function retrieve(db, env, d) {
+  const question = String(d.question || '').trim();
+  if (!question) { const e = new Error('请输入问题'); e.status = 400; throw e; }
+  if (question.length > 2000) { const e = new Error('问题过长，请精简后重试'); e.status = 400; throw e; }
+
+  await ensureKnowledge(db, env);
+
+  // 1) 检索最相关条款：优先向量余弦（Embedding 可用时），否则关键词重合度降级
+  let qv = null;
+  try {
+    qv = (await embedTexts(env, [question]))[0];
+  } catch (e) {
+    console.log('question embed failed, fallback to keyword mode:', e.message);
+  }
+  const rows = await db.query('SELECT id, title, content, embedding FROM ai_chunks');
+  const hasVectors = !!qv && rows.every(r => {
+    try { return JSON.parse(r.embedding || '[]').length > 0; } catch { return false; }
+  });
+  const chunks = rows
+    .map(r => ({
+      id: r.id, title: r.title, content: r.content,
+      score: hasVectors ? cosine(qv, JSON.parse(r.embedding)) : keywordScore(question, r.title + ' ' + r.content),
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, TOP_K);
+
+  // 2) 联网检索（前端可关闭）
+  const web = d.web === false ? [] : await webSearch(env, question);
+
+  // 3) 多轮历史（前端裁剪过）
+  const history = Array.isArray(d.history)
+    ? d.history.filter(m => m && (m.role === 'user' || m.role === 'assistant') && m.content)
+      .map(m => ({ role: m.role, content: String(m.content).slice(0, 2000) }))
+    : [];
+
+  return { question, history, chunks, web };
+}
+
 export async function handleAi(path, method, ctx) {
   const { db, env, user } = ctx;
 
-  // 问答（学生 / 辅导员 / 管理员均可）
+  // 流式问答（SSE，学生 / 辅导员 / 管理员均可）：逐段推送回答
+  if (path === '/api/ai/ask/stream' && method === 'POST') {
+    const d = await ctx.request.json();
+    let pre;
+    try {
+      pre = await retrieve(db, env, d);
+    } catch (e) {
+      return fail(e.message, e.status || 400, env);
+    }
+    const { readable, writable } = new TransformStream();
+    streamAnswer(env, writable, pre).catch(() => {});
+    return new Response(readable, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        ...corsHeaders(env),
+      },
+    });
+  }
+
+  // 一次性问答（兼容保留，学生 / 辅导员 / 管理员均可）
   if (path === '/api/ai/ask' && method === 'POST') {
     const d = await ctx.request.json();
-    const question = String(d.question || '').trim();
-    if (!question) return fail('请输入问题', 400, env);
-    if (question.length > 2000) return fail('问题过长，请精简后重试', 400, env);
-
-    await ensureKnowledge(db, env);
-
-    // 1) 检索最相关条款：优先向量余弦（Embedding 可用时），否则关键词重合度降级
-    let qv = null;
+    let pre;
     try {
-      qv = (await embedTexts(env, [question]))[0];
+      pre = await retrieve(db, env, d);
     } catch (e) {
-      console.log('question embed failed, fallback to keyword mode:', e.message);
+      return fail(e.message, e.status || 400, env);
     }
-    const rows = await db.query('SELECT id, title, content, embedding FROM ai_chunks');
-    const hasVectors = !!qv && rows.every(r => {
-      try { return JSON.parse(r.embedding || '[]').length > 0; } catch { return false; }
-    });
-    const chunks = rows
-      .map(r => ({
-        id: r.id, title: r.title, content: r.content,
-        score: hasVectors ? cosine(qv, JSON.parse(r.embedding)) : keywordScore(question, r.title + ' ' + r.content),
-      }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, TOP_K);
-
-    // 2) 联网检索（前端可关闭）
-    const web = d.web === false ? [] : await webSearch(env, question);
-
-    // 3) 生成回答；附带多轮历史（前端裁剪过）
-    const history = Array.isArray(d.history)
-      ? d.history.filter(m => m && (m.role === 'user' || m.role === 'assistant') && m.content)
-        .map(m => ({ role: m.role, content: String(m.content).slice(0, 2000) }))
-      : [];
-    const answer = await askLLM(env, question, history, chunks, web);
-
+    const answer = await askLLM(env, pre.question, pre.history, pre.chunks, pre.web);
     return ok({
       answer,
-      sources: chunks.map(c => ({ id: c.id, title: c.title, score: Math.round(c.score * 1000) / 1000 })),
-      web,
+      sources: pre.chunks.map(c => ({ id: c.id, title: c.title, score: Math.round(c.score * 1000) / 1000 })),
+      web: pre.web,
       model: CHAT_MODEL,
     }, env);
   }
