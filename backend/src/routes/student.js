@@ -4,13 +4,34 @@
 import { ok, fail } from '../http.js';
 import { now } from '../db.js';
 import { calcScores } from '../calc.js';
+import { checkApplyWindow, bjNow, activeWindows } from '../windows.js';
 
 const LIST_PATH = '/api/student/applications';
 const DETAIL_RE = /^\/api\/student\/applications\/(\d+)$/;
 const SCORE_PATH = '/api/student/score';
+const WINDOW_PATH = '/api/student/apply-window';
 
 export async function handleStudent(path, method, ctx) {
   const { request, env, db, user } = ctx;
+
+  // 本人当前可填报时间窗口：前端据此提示 / 预先禁用提交按钮（最终以后端校验为准）
+  if (path === WINDOW_PATH && method === 'GET') {
+    const w = await checkApplyWindow(db, user.account, 'student');
+    const windows = await activeWindows(db, user.account, 'student');
+    return ok({
+      allowed: w.allowed,
+      reason: w.reason,
+      current: w.current ? {
+        id: w.current.id, academic_year: w.current.academic_year, term: w.current.term,
+        start_at: w.current.start_at, end_at: w.current.end_at, remark: w.current.remark,
+      } : null,
+      windows: windows.map(x => ({
+        id: x.id, academic_year: x.academic_year, term: x.term,
+        start_at: x.start_at, end_at: x.end_at, remark: x.remark,
+      })),
+      serverTime: bjNow(),
+    }, env);
+  }
 
   // 学生查看本人综测成绩：只返回自己的档案（含班级年级），分数由前端 score.js 统一计算
   if (path === SCORE_PATH && method === 'GET') {
@@ -41,6 +62,10 @@ export async function handleStudent(path, method, ctx) {
     const stu = await db.queryOne('SELECT id FROM students WHERE xh = ?', [detail.xh]);
     if (!stu) return fail('学生档案不存在，请联系辅导员', 400, env);
     if (user.account !== detail.xh) return fail('只能提交本人的申请', 403, env);
+
+    // 填报时间窗口限制：超出可填报时间（或未命中任何启用窗口）时拒绝提交
+    const win = await checkApplyWindow(db, user.account, 'student');
+    if (!win.allowed) return fail(win.reason, 403, env);
 
     const scores = calcScores(detail);
     const createdAt = now();

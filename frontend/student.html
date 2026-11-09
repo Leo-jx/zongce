@@ -199,6 +199,7 @@ body{font-family:'Microsoft YaHei','PingFang SC',system-ui,sans-serif;background
 
     <div class="summary">
       <div class="row">本次申报奖励合计：德育 <b id="pv-deyu">0</b> · 智育 <b id="pv-zhiyu">0</b> · 体育 <b id="pv-tiyu">0</b> · 美育 <b id="pv-meiyu">0</b> · 劳育 <b id="pv-laoyu">0</b><span id="pv-koufen"></span></div>
+      <div id="winNotice" class="hidden" style="margin:10px 0 0;padding:9px 12px;border-radius:8px;font-size:13px;line-height:1.6"></div>
       <div class="btnrow">
         <button class="btn primary" id="btnSubmit">提交申请</button>
         <button class="btn ghost" id="btnReset">清空重填</button>
@@ -456,6 +457,7 @@ async function submitApplication(){
       toast('提交失败: '+result.msg,'err');
       btn.disabled = false;
       btn.textContent = '提交申请';
+      checkApplyWindowUI(); // 若因填报窗口被拒，同步刷新按钮与提示状态
       return;
     }
     toast('申请提交成功！等待辅导员审核','ok');
@@ -673,8 +675,40 @@ document.getElementById('btnReset').addEventListener('click', ()=>{
     TOKEN = session.token;
     USER = session.user;
     enterMain();
+    checkApplyWindowUI();
   }
 })();
+
+// 填报时间窗口：进入页面即校验并提示（最终以后端提交时校验为准），每 5 分钟刷新
+let WIN_ALLOWED = true;
+async function checkApplyWindowUI(){
+  const el = document.getElementById('winNotice');
+  const btn = document.getElementById('btnSubmit');
+  try{
+    const resp = await fetch(API+'/api/student/apply-window', { headers: { 'Authorization': 'Bearer '+TOKEN } });
+    const r = await resp.json();
+    if(r.code!==0) return; // 接口异常不阻断，提交时后端仍会校验
+    const d = r.data;
+    WIN_ALLOWED = !!d.allowed;
+    if(!d.allowed){
+      el.style.background='#fdeceb';el.style.color='#b3362f';el.style.border='1px solid #f3c9c6';
+      el.textContent='⛔ '+d.reason;
+      el.classList.remove('hidden');
+      btn.disabled=true;btn.textContent='当前不可填报';btn.title=d.reason;
+    }else if(d.current){
+      el.style.background='#e7f6ed';el.style.color='#1a7f4b';el.style.border='1px solid #bfe3ce';
+      el.textContent='✅ 本次填报窗口开放中：'+(d.current.academic_year)+'学年第'+(Number(d.current.term)===2?'二':'一')
+        +'学期（'+String(d.current.start_at).slice(0,16).replace('T',' ')+' ~ '+String(d.current.end_at).slice(0,16).replace('T',' ')
+        +'），请在截止前提交';
+      el.classList.remove('hidden');
+      btn.disabled=false;btn.textContent='提交申请';btn.title='';
+    }else{
+      el.classList.add('hidden');
+      btn.disabled=false;btn.textContent='提交申请';btn.title='';
+    }
+  }catch(e){ /* 网络异常不阻断，提交时后端仍会校验 */ }
+}
+setInterval(()=>{ if(TOKEN) checkApplyWindowUI(); }, 5*60*1000);
 </script>
 </body>
 </html>

@@ -94,6 +94,7 @@ table.grid tbody tr:hover{background:#f7fafd}
     <button class="tabbtn" data-tab="students">学生管理</button>
     <button class="tabbtn" data-tab="accounts">账号管理</button>
     <button class="tabbtn" data-tab="attendance">考勤查询</button>
+    <button class="tabbtn" data-tab="windows">填报窗口</button>
   </div>
 
   <div id="tab-overview">
@@ -198,6 +199,41 @@ table.grid tbody tr:hover{background:#f7fafd}
         <button class="btn" id="btnSearchAtt">查询</button>
       </div>
       <div class="tblwrap" style="margin-top:12px"><table class="grid" id="attTable"></table></div>
+    </div>
+  </div>
+
+  <div id="tab-windows" class="hidden">
+    <div class="card">
+      <h3 id="winFormTitle">新增填报时间窗口</h3>
+      <div class="formrow">
+        <select id="winScope" title="配置对象">
+          <option value="role">按角色配置</option>
+          <option value="account">按账号配置</option>
+        </select>
+        <select id="winRole" title="角色">
+          <option value="student">学生</option>
+          <option value="teacher">辅导员 / 教师</option>
+        </select>
+        <input id="winAccount" class="hidden" placeholder="学号 / 教师号（需已存在）" style="min-width:170px">
+        <select id="winYear" title="学年度"></select>
+        <select id="winTerm" title="学期">
+          <option value="1">第一学期（9~1月）</option>
+          <option value="2">第二学期（2~8月）</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:4px;font-size:13px">开放
+          <input type="datetime-local" id="winStart"></label>
+        <label style="display:flex;align-items:center;gap:4px;font-size:13px">截止
+          <input type="datetime-local" id="winEnd"></label>
+        <label style="display:flex;align-items:center;gap:4px;font-size:13px"><input type="checkbox" id="winEnabled" checked> 启用</label>
+        <input id="winRemark" placeholder="备注（可选）" style="min-width:140px">
+        <button class="btn primary" id="btnWinSave">保存</button>
+        <button class="btn hidden" id="btnWinCancel">取消编辑</button>
+      </div>
+      <div class="hint">同一角色 / 账号可配置多条窗口，当前时间（北京时间）落在任一启用窗口内即可提交申请；<b>未配置任何启用窗口时不做限制</b>。按账号配置优先精确命中（如仅放行某个学生补报）。</div>
+    </div>
+    <div class="card">
+      <h3>窗口设置列表<span style="font-size:12px;color:var(--ink-3);font-weight:400;margin-left:8px" id="winSummary"></span></h3>
+      <div class="tblwrap"><table class="grid" id="winTable"></table></div>
     </div>
   </div>
 </div>
@@ -698,7 +734,7 @@ document.querySelectorAll('#mainTabs .tabbtn').forEach(btn=>{
     document.querySelectorAll('#mainTabs .tabbtn').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
     const t=btn.dataset.tab;
-    ['overview','perms','classes','teachers','students','accounts','attendance'].forEach(x=>{
+    ['overview','perms','classes','teachers','students','accounts','attendance','windows'].forEach(x=>{
       document.getElementById('tab-'+x).classList.toggle('hidden',x!==t);
     });
     if(t==='perms')loadPerms();
@@ -708,8 +744,118 @@ document.querySelectorAll('#mainTabs .tabbtn').forEach(btn=>{
     if(t==='accounts')loadAccounts();
     if(t==='attendance')loadAttendance();
     if(t==='overview')loadOverview();
+    if(t==='windows')loadWindows();
   });
 });
+
+/* ============ 填报时间窗口 ============ */
+let winEditing=null; // 正在修改的窗口 id
+const WIN_STATUS={open:['开放中','on'],upcoming:['未开始','role'],ended:['已截止','off'],disabled:['已停用','off']};
+
+// 学年度下拉：本学年 ±1
+(function(){
+  const d=new Date(),y=d.getFullYear(),y1=d.getMonth()+1>=9?y:y-1;
+  const years=[y1-1,y1,y1+1].map(x=>x+'-'+(x+1));
+  document.getElementById('winYear').innerHTML=years.map(v=>'<option value="'+v+'">'+v+'</option>').join('');
+})();
+
+function winScopeChange(){
+  const acc=document.getElementById('winScope').value==='account';
+  document.getElementById('winRole').classList.toggle('hidden',acc);
+  document.getElementById('winAccount').classList.toggle('hidden',!acc);
+}
+document.getElementById('winScope').addEventListener('change',winScopeChange);
+winScopeChange();
+
+function resetWinForm(){
+  winEditing=null;
+  document.getElementById('winFormTitle').textContent='新增填报时间窗口';
+  document.getElementById('btnWinSave').textContent='保存';
+  document.getElementById('btnWinCancel').classList.add('hidden');
+  document.getElementById('winScope').value='role';winScopeChange();
+  document.getElementById('winRole').value='student';
+  document.getElementById('winAccount').value='';
+  document.getElementById('winEnabled').checked=true;
+  document.getElementById('winRemark').value='';
+  document.getElementById('winStart').value='';
+  document.getElementById('winEnd').value='';
+}
+
+async function loadWindows(){
+  const r=await apiGet('/api/admin/apply-windows');
+  if(r.code!==0){toast(r.msg||'加载失败','err');return;}
+  const list=r.data.windows||[];
+  const open=list.filter(x=>x.status==='open').length;
+  document.getElementById('winSummary').textContent='共 '+list.length+' 条，开放中 '+open+' 条（服务器时间 '+r.data.serverTime+'）';
+  const tb=document.getElementById('winTable');
+  if(!list.length){tb.innerHTML='<tbody><tr><td class="empty">暂无配置：当前不限制填报时间，可点击上方「保存」新增窗口</td></tr></tbody>';return;}
+  tb.innerHTML='<thead><tr><th>ID</th><th>配置对象</th><th>学年度 / 学期</th><th>开放时间</th><th>截止时间</th><th>状态</th><th>备注</th><th>操作</th></tr></thead><tbody>'
+    +list.map(w=>{
+      const [lab,cls]=WIN_STATUS[w.status]||[w.status,''];
+      return '<tr>'
+        +'<td>'+w.id+'</td>'
+        +'<td>'+(w.scope==='account'?'<span class="tag role">账号</span> ':'<span class="tag on">角色</span> ')+esc(w.target||'')+'</td>'
+        +'<td>'+esc(w.termLabel)+'</td>'
+        +'<td>'+esc(String(w.start_at).slice(0,16))+'</td>'
+        +'<td>'+esc(String(w.end_at).slice(0,16))+'</td>'
+        +'<td><span class="tag '+cls+'">'+lab+'</span></td>'
+        +'<td>'+esc(w.remark||'')+'</td>'
+        +'<td style="white-space:nowrap">'
+          +'<button class="btn sm" data-wtoggle="'+w.id+'" data-wen="'+(w.enabled?0:1)+'">'+(w.enabled?'停用':'启用')+'</button> '
+          +'<button class="btn sm" data-wedit="'+w.id+'">修改</button> '
+          +'<button class="btn sm danger" data-wdel="'+w.id+'">删除</button>'
+        +'</td></tr>';
+    }).join('')+'</tbody>';
+  tb.querySelectorAll('[data-wtoggle]').forEach(b=>b.addEventListener('click',async()=>{
+    const r2=await apiPut('/api/admin/apply-windows/'+b.dataset.wtoggle,{enabled:Number(b.dataset.wen)});
+    toast(r2.msg||'已更新',r2.code===0?'ok':'err');loadWindows();
+  }));
+  tb.querySelectorAll('[data-wedit]').forEach(b=>b.addEventListener('click',()=>{
+    const w=list.find(x=>x.id===Number(b.dataset.wedit));if(!w)return;
+    winEditing=w.id;
+    document.getElementById('winFormTitle').textContent='修改填报时间窗口 #'+w.id;
+    document.getElementById('btnWinSave').textContent='保存修改';
+    document.getElementById('btnWinCancel').classList.remove('hidden');
+    document.getElementById('winScope').value=w.scope;winScopeChange();
+    document.getElementById('winRole').value=w.role||'student';
+    document.getElementById('winAccount').value=w.account||'';
+    document.getElementById('winYear').value=w.academic_year;
+    document.getElementById('winTerm').value=String(w.term);
+    document.getElementById('winStart').value=String(w.start_at).slice(0,16);
+    document.getElementById('winEnd').value=String(w.end_at).slice(0,16);
+    document.getElementById('winEnabled').checked=!!w.enabled;
+    document.getElementById('winRemark').value=w.remark||'';
+    window.scrollTo({top:0,behavior:'smooth'});
+  }));
+  tb.querySelectorAll('[data-wdel]').forEach(b=>b.addEventListener('click',async()=>{
+    if(!confirm('确定删除该时间窗口配置（#'+b.dataset.wdel+'）？删除后该限制立即解除。'))return;
+    const r2=await apiDel('/api/admin/apply-windows/'+b.dataset.wdel);
+    toast(r2.msg||'已删除',r2.code===0?'ok':'err');loadWindows();
+  }));
+}
+
+document.getElementById('btnWinSave').addEventListener('click',async()=>{
+  const body={
+    scope:document.getElementById('winScope').value,
+    role:document.getElementById('winRole').value,
+    account:document.getElementById('winAccount').value.trim(),
+    academic_year:document.getElementById('winYear').value,
+    term:document.getElementById('winTerm').value,
+    start_at:document.getElementById('winStart').value,
+    end_at:document.getElementById('winEnd').value,
+    enabled:document.getElementById('winEnabled').checked?1:0,
+    remark:document.getElementById('winRemark').value.trim(),
+  };
+  if(!body.start_at){toast('请选择开放时间','err');return;}
+  if(!body.end_at){toast('请选择截止时间','err');return;}
+  const r=winEditing
+    ?await apiPut('/api/admin/apply-windows/'+winEditing,body)
+    :await apiPost('/api/admin/apply-windows',body);
+  if(r.code!==0){toast(r.msg||'保存失败','err');return;}
+  toast(winEditing?'窗口已修改':'窗口已创建','ok');
+  resetWinForm();loadWindows();
+});
+document.getElementById('btnWinCancel').addEventListener('click',resetWinForm);
 
 // 会话由统一登录页写入，缺失或角色不符时自动跳转
 (function(){

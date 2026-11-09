@@ -9,14 +9,60 @@ import bcrypt from 'bcryptjs';
 import { ok, fail } from '../http.js';
 import { now } from '../db.js';
 import { rowScores } from '../calc.js';
+import { bjNow, windowTermLabel } from '../windows.js';
 import { requirePerm, PERMISSION_DEFS, PERMISSION_KEYS, ROLE_LABELS, ROLE_DEFAULTS, loadPermissions, applyPermissionOverrides } from '../rbac.js';
 
 const PERM_PATH = '/api/admin/permissions';
 const ACCOUNTS_PATH = '/api/admin/accounts';
 const ACCOUNT_RE = /^\/api\/admin\/accounts\/(\d+)$/;
 const PROOFS_PATH = '/api/admin/proofs';
+const WINDOWS_PATH = '/api/admin/apply-windows';
+const WINDOW_RE = /^\/api\/admin\/apply-windows\/(\d+)$/;
 
 const DEFAULT_PASSWORD = '123456';
+
+/**
+ * 规范化填报时间窗口入参；失败抛出带 status 的 Error。
+ * 兼容前端 datetime-local 的 "YYYY-MM-DDTHH:MM"（自动补秒、T 换空格）。
+ */
+async function normalizeWindow(db, d, { partial = false, old = null } = {}) {
+  const get = (k, def = '') => (d[k] !== undefined ? d[k] : (old ? old[k] : def));
+  const out = {};
+  out.scope = String(get('scope', 'role')) === 'account' ? 'account' : 'role';
+  out.role = String(get('role', '')).trim();
+  out.account = String(get('account', '')).trim();
+  if (out.scope === 'role') {
+    if (!['student', 'teacher'].includes(out.role)) {
+      throw Object.assign(new Error('按角色配置时，角色须为学生或辅导员教师'), { status: 400 });
+    }
+  } else {
+    if (!out.account) throw Object.assign(new Error('按账号配置时，账号不能为空'), { status: 400 });
+    const u = await db.queryOne('SELECT account, role FROM users WHERE account = ?', [out.account]);
+    if (!u) throw Object.assign(new Error('账号不存在：' + out.account), { status: 400 });
+  }
+  out.academic_year = String(get('academic_year', '')).trim();
+  const ym = out.academic_year.match(/^(\d{4})-(\d{4})$/);
+  if (!ym || Number(ym[2]) !== Number(ym[1]) + 1) {
+    throw Object.assign(new Error('学年度格式应为「2026-2027」'), { status: 400 });
+  }
+  out.term = Number(get('term', 1));
+  if (out.term !== 1 && out.term !== 2) throw Object.assign(new Error('学期只能为第一或第二学期'), { status: 400 });
+
+  const fmtTime = (v, name) => {
+    let s = String(v || '').trim().replace('T', ' ');
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(s)) s += ':00';
+    if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(s)) {
+      throw Object.assign(new Error(name + '格式应为 YYYY-MM-DD HH:MM'), { status: 400 });
+    }
+    return s;
+  };
+  out.start_at = fmtTime(get('start_at'), '开放时间');
+  out.end_at = fmtTime(get('end_at'), '截止时间');
+  if (out.start_at >= out.end_at) throw Object.assign(new Error('开放时间必须早于截止时间'), { status: 400 });
+  out.enabled = Number(get('enabled', 1)) ? 1 : 0;
+  out.remark = String(get('remark', '')).trim().slice(0, 200);
+  return out;
+}
 
 /** 角色默认权限（含 role_permissions 覆盖后的结果） */
 async function rolePermissions(db, role) {
@@ -295,6 +341,81 @@ export async function handleAdmin(path, method, ctx) {
       stats, distribution, byClass, byMajor, topStudents, dimensions, gradeAvg, trend,
       alerts,
     }, env);
+  }
+
+  // ===================== 申报填报时间窗口（按学年度 / 学期） =====================
+
+  // 列表：含目标账号姓名、当前开放状态（服务端按北京时间计算）
+  if (path === WINDOWS_PATH && method === 'GET') {
+    const denied = requirePerm(ctx, 'window:manage'); if (denied) return denied;
+    const rows = await db.query('SELECT * FROM apply_windows ORDER BY id DESC');
+    const accounts = [...new Set(rows.filter(r => r.scope === 'account').map(r => r.account))];
+    const nameMap = {};
+    for (const acc of accounts) {
+      const u = await db.queryOne('SELECT name, role FROM users WHERE account = ?', [acc]);
+      if (u) nameMap[acc] = u.name + '（' + u.account + '）';
+    }
+    const ts = bjNow();
+    return ok({
+      serverTime: ts,
+      windows: rows.map(r => ({
+        ...r,
+        target: r.scope === 'account'
+          ? (nameMap[r.account] || r.account)
+          : (r.role === 'teacher' ? '辅导员 / 教师' : '学生'),
+        status: !r.enabled ? 'disabled' : (ts < r.start_at ? 'upcoming' : (ts > r.end_at ? 'ended' : 'open')),
+        termLabel: windowTermLabel(r),
+      })),
+    }, env);
+  }
+
+  // 新增
+  if (path === WINDOWS_PATH && method === 'POST') {
+    const denied = requirePerm(ctx, 'window:manage'); if (denied) return denied;
+    const d = await request.json();
+    let norm;
+    try { norm = await normalizeWindow(db, d); } catch (e) { return fail(e.message, e.status || 400, env); }
+    const r = await db.insert(
+      `INSERT INTO apply_windows (scope, role, account, academic_year, term, start_at, end_at, enabled, remark, created_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [norm.scope, norm.role, norm.account, norm.academic_year, norm.term,
+        norm.start_at, norm.end_at, norm.enabled, norm.remark, ctx.user.account, now()]
+    );
+    return ok({ id: r.insertId }, env);
+  }
+
+  // 修改（支持局部更新；启用 / 停用也走此接口，传 {enabled:0|1}）
+  const wm = path.match(WINDOW_RE);
+  if (wm && method === 'PUT') {
+    const denied = requirePerm(ctx, 'window:manage'); if (denied) return denied;
+    const old = await db.queryOne('SELECT * FROM apply_windows WHERE id = ?', [wm[1]]);
+    if (!old) return fail('窗口设置不存在', 404, env);
+    const d = await request.json();
+    // 仅切换启用状态时无需整体校验
+    const keys = Object.keys(d || {});
+    if (keys.length === 1 && keys[0] === 'enabled') {
+      await db.update('UPDATE apply_windows SET enabled = ?, updated_at = ? WHERE id = ?',
+        [Number(d.enabled) ? 1 : 0, now(), wm[1]]);
+      return ok(null, env);
+    }
+    let norm;
+    try { norm = await normalizeWindow(db, d, { partial: true, old }); } catch (e) { return fail(e.message, e.status || 400, env); }
+    await db.update(
+      `UPDATE apply_windows SET scope = ?, role = ?, account = ?, academic_year = ?, term = ?,
+              start_at = ?, end_at = ?, enabled = ?, remark = ?, updated_at = ? WHERE id = ?`,
+      [norm.scope, norm.role, norm.account, norm.academic_year, norm.term,
+        norm.start_at, norm.end_at, norm.enabled, norm.remark, now(), wm[1]]
+    );
+    return ok(null, env);
+  }
+
+  // 删除
+  if (wm && method === 'DELETE') {
+    const denied = requirePerm(ctx, 'window:manage'); if (denied) return denied;
+    const old = await db.queryOne('SELECT id FROM apply_windows WHERE id = ?', [wm[1]]);
+    if (!old) return fail('窗口设置不存在', 404, env);
+    await db.run('DELETE FROM apply_windows WHERE id = ?', [wm[1]]);
+    return ok(null, env);
   }
 
   // ===================== 证明材料占用（Workers KV） =====================

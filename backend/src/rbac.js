@@ -24,6 +24,7 @@ export const PERMISSION_DEFS = [
   { key: 'user:manage', group: '账号', label: '管理账号（新增 / 停用）' },
   { key: 'file:manage', group: '系统', label: '管理证明材料（清理 KV 占用）' },
   { key: 'permission:manage', group: '系统', label: '管理角色权限' },
+  { key: 'window:manage', group: '系统', label: '管理填报时间窗口' },
 ];
 
 export const PERMISSION_KEYS = PERMISSION_DEFS.map(p => p.key);
