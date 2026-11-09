@@ -17,14 +17,16 @@ export function bjNow() {
 }
 
 export function windowTermLabel(w) {
-  return (w.academic_year || '?') + '学年第' + (Number(w.term) === 2 ? '二' : '一') + '学期';
+  const t = Number(w.term);
+  if (t === 0) return (w.academic_year || '?') + '学年（整学年）';
+  return (w.academic_year || '?') + '学年第' + (t === 2 ? '二' : '一') + '学期';
 }
 
-/** 查询某账号（含其角色）当前所有启用中的窗口 */
+/** 查询某账号（含其角色）当前所有启用中的窗口（role='all' 的窗口对所有角色生效） */
 export async function activeWindows(db, account, role) {
   return db.query(
     `SELECT * FROM apply_windows
-      WHERE enabled = 1 AND ((scope = 'role' AND role = ?) OR (scope = 'account' AND account = ?))
+      WHERE enabled = 1 AND ((scope = 'role' AND (role = ? OR role = 'all')) OR (scope = 'account' AND account = ?))
       ORDER BY start_at ASC`,
     [role, account]
   );

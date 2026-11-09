@@ -697,8 +697,9 @@ async function checkApplyWindowUI(){
       btn.disabled=true;btn.textContent='当前不可填报';btn.title=d.reason;
     }else if(d.current){
       el.style.background='#e7f6ed';el.style.color='#1a7f4b';el.style.border='1px solid #bfe3ce';
-      el.textContent='✅ 本次填报窗口开放中：'+(d.current.academic_year)+'学年第'+(Number(d.current.term)===2?'二':'一')
-        +'学期（'+String(d.current.start_at).slice(0,16).replace('T',' ')+' ~ '+String(d.current.end_at).slice(0,16).replace('T',' ')
+      const termName={0:'整学年',1:'第一学期',2:'第二学期'}[Number(d.current.term)]||'';
+      el.textContent='✅ 本次填报窗口开放中：'+(d.current.academic_year)+'学年 '+termName
+        +'（'+String(d.current.start_at).slice(0,16).replace('T',' ')+' ~ '+String(d.current.end_at).slice(0,16).replace('T',' ')
         +'），请在截止前提交';
       el.classList.remove('hidden');
       btn.disabled=false;btn.textContent='提交申请';btn.title='';

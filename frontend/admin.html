@@ -211,12 +211,14 @@ table.grid tbody tr:hover{background:#f7fafd}
           <option value="account">按账号配置</option>
         </select>
         <select id="winRole" title="角色">
+          <option value="all">全部角色</option>
           <option value="student">学生</option>
           <option value="teacher">辅导员 / 教师</option>
         </select>
         <input id="winAccount" class="hidden" placeholder="学号 / 教师号（需已存在）" style="min-width:170px">
         <select id="winYear" title="学年度"></select>
         <select id="winTerm" title="学期">
+          <option value="0">整个学年（不区分学期）</option>
           <option value="1">第一学期（9~1月）</option>
           <option value="2">第二学期（2~8月）</option>
         </select>
@@ -752,10 +754,11 @@ document.querySelectorAll('#mainTabs .tabbtn').forEach(btn=>{
 let winEditing=null; // 正在修改的窗口 id
 const WIN_STATUS={open:['开放中','on'],upcoming:['未开始','role'],ended:['已截止','off'],disabled:['已停用','off']};
 
-// 学年度下拉：本学年 ±1
+// 学年度下拉：本学年往前 3 届、往后 5 届，覆盖往年与未来学年
 (function(){
   const d=new Date(),y=d.getFullYear(),y1=d.getMonth()+1>=9?y:y-1;
-  const years=[y1-1,y1,y1+1].map(x=>x+'-'+(x+1));
+  const years=[];
+  for(let x=y1-3;x<=y1+5;x++)years.push(x+'-'+(x+1));
   document.getElementById('winYear').innerHTML=years.map(v=>'<option value="'+v+'">'+v+'</option>').join('');
 })();
 

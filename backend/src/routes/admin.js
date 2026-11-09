@@ -32,8 +32,8 @@ async function normalizeWindow(db, d, { partial = false, old = null } = {}) {
   out.role = String(get('role', '')).trim();
   out.account = String(get('account', '')).trim();
   if (out.scope === 'role') {
-    if (!['student', 'teacher'].includes(out.role)) {
-      throw Object.assign(new Error('按角色配置时，角色须为学生或辅导员教师'), { status: 400 });
+    if (!['student', 'teacher', 'all'].includes(out.role)) {
+      throw Object.assign(new Error('按角色配置时，角色须为学生、辅导员教师或全部角色'), { status: 400 });
     }
   } else {
     if (!out.account) throw Object.assign(new Error('按账号配置时，账号不能为空'), { status: 400 });
@@ -46,7 +46,7 @@ async function normalizeWindow(db, d, { partial = false, old = null } = {}) {
     throw Object.assign(new Error('学年度格式应为「2026-2027」'), { status: 400 });
   }
   out.term = Number(get('term', 1));
-  if (out.term !== 1 && out.term !== 2) throw Object.assign(new Error('学期只能为第一或第二学期'), { status: 400 });
+  if (![0, 1, 2].includes(out.term)) throw Object.assign(new Error('学期只能为整学年、第一或第二学期'), { status: 400 });
 
   const fmtTime = (v, name) => {
     let s = String(v || '').trim().replace('T', ' ');
@@ -362,7 +362,7 @@ export async function handleAdmin(path, method, ctx) {
         ...r,
         target: r.scope === 'account'
           ? (nameMap[r.account] || r.account)
-          : (r.role === 'teacher' ? '辅导员 / 教师' : '学生'),
+          : (r.role === 'teacher' ? '辅导员 / 教师' : (r.role === 'all' ? '全部角色' : '学生')),
         status: !r.enabled ? 'disabled' : (ts < r.start_at ? 'upcoming' : (ts > r.end_at ? 'ended' : 'open')),
         termLabel: windowTermLabel(r),
       })),
