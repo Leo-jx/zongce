@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>综测数据大屏 · 超级管理员</title>
+<link rel="icon" type="image/png" href="/logo.png">
+<style>
+:root{
+  --bg1:#0a1730; --bg2:#0e2246; --card:rgba(16,38,74,.72); --cardline:rgba(84,140,220,.28);
+  --ink:#e8f1ff; --ink2:#9fb6d8; --ink3:#6e86ac;
+  --cyan:#3fd2ff; --blue:#4f8cff; --gold:#ffc957; --green:#3ce39b; --red:#ff6b7a; --purple:#b48cff;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;color:var(--ink);overflow:hidden;
+  background:radial-gradient(1200px 600px at 15% -10%,#14336b 0%,transparent 55%),
+             radial-gradient(1000px 500px at 90% 110%,#0f2d5e 0%,transparent 50%),
+             linear-gradient(160deg,var(--bg1),var(--bg2))}
+/* ---------- 大屏缩放容器（1920×1080 设计稿等比缩放） ---------- */
+#stage{position:absolute;left:50%;top:50%;width:1920px;height:1080px;transform-origin:center center;display:flex;flex-direction:column}
+body.fluid #stage{position:static;width:auto;height:auto;transform:none!important;min-height:100vh}
+/* ---------- 顶栏 ---------- */
+header{height:76px;display:flex;align-items:center;gap:18px;padding:0 26px;
+  background:linear-gradient(90deg,rgba(20,52,110,.85),rgba(15,34,72,.65) 50%,rgba(20,52,110,.85));
+  border-bottom:1px solid var(--cardline)}
+header .ttl{display:flex;align-items:center;gap:12px}
+header .ttl .mark{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--blue),var(--cyan));
+  display:flex;align-items:center;justify-content:center;font-size:19px}
+header h1{font-size:22px;letter-spacing:3px;font-weight:700;
+  background:linear-gradient(90deg,#fff,#8fd4ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+header .sub{font-size:11.5px;color:var(--ink3);margin-top:2px;letter-spacing:1px}
+header .mid{flex:1;display:flex;justify-content:center}
+.clock{text-align:center}
+.clock .t{font-size:22px;font-weight:700;color:var(--cyan);letter-spacing:2px;font-family:Consolas,monospace}
+.clock .d{font-size:11px;color:var(--ink3)}
+header .ops{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+header select{background:rgba(10,26,54,.9);color:var(--ink);border:1px solid var(--cardline);border-radius:7px;
+  padding:6px 9px;font-size:12.5px;max-width:150px}
+header select:focus{outline:0;border-color:var(--cyan)}
+.hbtn{background:rgba(79,140,255,.16);color:var(--ink);border:1px solid var(--cardline);border-radius:7px;
+  padding:6px 12px;font-size:12.5px;cursor:pointer;white-space:nowrap}
+.hbtn:hover{border-color:var(--cyan);color:var(--cyan)}
+.hbtn.primary{background:linear-gradient(135deg,rgba(63,210,255,.25),rgba(79,140,255,.25));border-color:rgba(63,210,255,.5)}
+/* ---------- KPI ---------- */
+.kpis{height:104px;display:grid;grid-template-columns:repeat(7,1fr);gap:12px;padding:12px 26px 0}
+.kpi{position:relative;border:1px solid var(--cardline);border-radius:10px;padding:10px 14px;overflow:hidden;
+  background:linear-gradient(160deg,rgba(30,64,130,.5),rgba(14,32,66,.6))}
+.kpi::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,var(--cyan),transparent)}
+.kpi .num{font-size:26px;font-weight:700;font-family:Consolas,monospace;color:var(--cyan)}
+.kpi .num small{font-size:13px;font-weight:400;color:var(--ink2)}
+.kpi .lab{font-size:12px;color:var(--ink2);margin-top:3px}
+.kpi.gold .num{color:var(--gold)} .kpi.green .num{color:var(--green)} .kpi.red .num{color:var(--red)} .kpi.purple .num{color:var(--purple)}
+/* ---------- 主体 ---------- */
+main{flex:1;display:grid;grid-template-columns:1fr 1.16fr 1fr;gap:12px;padding:12px 26px 16px;min-height:0}
+.col{display:grid;grid-template-rows:1fr 1fr;gap:12px;min-height:0}
+.col.mid{grid-template-rows:1.06fr .94fr}
+.card{position:relative;border:1px solid var(--cardline);border-radius:12px;padding:12px 14px;min-height:0;display:flex;flex-direction:column;
+  background:linear-gradient(170deg,rgba(18,40,80,.66),rgba(10,24,50,.7));box-shadow:inset 0 0 24px rgba(47,110,220,.08)}
+.card::before,.card::after{content:'';position:absolute;width:14px;height:14px;border-color:var(--cyan);border-style:solid;opacity:.75}
+.card::before{left:-1px;top:-1px;border-width:2px 0 0 2px;border-radius:12px 0 0 0}
+.card::after{right:-1px;bottom:-1px;border-width:0 2px 2px 0;border-radius:0 0 12px 0}
+.card h3{font-size:14.5px;font-weight:600;letter-spacing:1px;display:flex;align-items:center;gap:8px;margin-bottom:6px;flex:none}
+.card h3::before{content:'';width:4px;height:14px;border-radius:2px;background:linear-gradient(180deg,var(--cyan),var(--blue))}
+.card h3 .tail{margin-left:auto;font-size:11px;color:var(--ink3);font-weight:400}
+.chart{flex:1;min-height:0}
+svg text{font-family:inherit}
+/* 排名列表 */
+.ranklist{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:7px;padding-right:4px}
+.ranklist::-webkit-scrollbar,.alerts::-webkit-scrollbar{width:5px}
+.ranklist::-webkit-scrollbar-thumb,.alerts::-webkit-scrollbar-thumb{background:rgba(84,140,220,.4);border-radius:3px}
+.rk{display:flex;align-items:center;gap:10px}
+.rk .no{width:26px;height:26px;border-radius:7px;flex:none;display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:700;color:#0a1730;background:#33507e}
+.rk:nth-child(1) .no{background:linear-gradient(135deg,#ffd76e,#ffab2e)}
+.rk:nth-child(2) .no{background:linear-gradient(135deg,#e8f1ff,#a9c3e8)}
+.rk:nth-child(3) .no{background:linear-gradient(135deg,#ffb199,#ff7a59)}
+.rk .who{width:210px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rk .who b{font-size:13.5px} .rk .who span{font-size:11px;color:var(--ink3);margin-left:6px}
+.rk .bar{flex:1;height:10px;border-radius:5px;background:rgba(84,140,220,.16);overflow:hidden}
+.rk .bar i{display:block;height:100%;border-radius:5px;background:linear-gradient(90deg,var(--blue),var(--cyan))}
+.rk .val{width:64px;text-align:right;font-family:Consolas,monospace;font-size:14px;color:var(--gold);flex:none}
+/* 预警 */
+.alerts{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:9px}
+.al{border:1px solid var(--cardline);border-left:3px solid var(--gold);border-radius:8px;padding:8px 11px;background:rgba(255,201,87,.06)}
+.al.high{border-left-color:var(--red);background:rgba(255,107,122,.07)}
+.al .t{font-size:13px;font-weight:600;display:flex;align-items:center;gap:7px}
+.al .t .lv{font-size:10.5px;padding:1px 7px;border-radius:20px;border:1px solid}
+.al.high .lv{color:var(--red);border-color:rgba(255,107,122,.5)}
+.al:not(.high) .lv{color:var(--gold);border-color:rgba(255,201,87,.5)}
+.al ul{margin:5px 0 0 16px;font-size:11.5px;color:var(--ink2);display:flex;flex-direction:column;gap:2px}
+.al ul li{list-style:square}
+.none{color:var(--ink3);font-size:12.5px;text-align:center;padding:20px 0}
+/* 图例 */
+.legend{display:flex;gap:14px;font-size:11px;color:var(--ink2);justify-content:center}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+/* 小屏响应式降级 */
+@media (max-width:1023px), (max-height:620px){
+  body{overflow:auto}
+  header{height:auto;padding:10px 14px;flex-wrap:wrap;gap:8px}
+  .kpis{height:auto;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));padding:10px 14px 0}
+  main{grid-template-columns:1fr;padding:10px 14px 16px}
+  .col{grid-template-rows:auto auto}
+  .col.mid{grid-template-rows:auto auto}
+  .card{min-height:300px}
+}
+</style>
+</head>
+<body>
+<div id="stage">
+  <header>
+    <div class="ttl">
+      <div class="mark">📊</div>
+      <div>
+        <h1>综合素质测评 · 数据大屏</h1>
+        <div class="sub">HUNAN VOCATIONAL COLLEGE OF ETHNIC GROUPS · ZONGCE ANALYTICS</div>
+      </div>
+    </div>
+    <div class="mid"><div class="clock"><div class="t" id="clock">--:--:--</div><div class="d" id="clockDate">----</div></div></div>
+    <div class="ops">
+      <select id="fTerm" title="学期"></select>
+      <select id="fGrade" title="年级"></select>
+      <select id="fMajor" title="专业"></select>
+      <select id="fClass" title="班级"></select>
+      <select id="fStatus" title="学籍状态"></select>
+      <button class="hbtn primary" id="btnRefresh">立即刷新</button>
+      <span style="font-size:11px;color:var(--ink3)">自动 <b id="cd" style="color:var(--cyan)">60</b>s</span>
+      <button class="hbtn" id="btnBack">返回管理端</button>
+    </div>
+  </header>
+
+  <div class="kpis" id="kpis">
+    <div class="kpi"><div class="num" id="kStudents">-</div><div class="lab">学生总数</div></div>
+    <div class="kpi"><div class="num" id="kAvg">-<small> 分</small></div><div class="lab">综测平均分</div></div>
+    <div class="kpi gold"><div class="num" id="kMax">-<small> 分</small></div><div class="lab">最高分</div></div>
+    <div class="kpi green"><div class="num" id="kPass">-<small> %</small></div><div class="lab">及格率（≥60）</div></div>
+    <div class="kpi purple"><div class="num" id="kExcellent">-</div><div class="lab">优秀人数（≥90）</div></div>
+    <div class="kpi"><div class="num" id="kClasses">-</div><div class="lab">班级 / 专业数</div></div>
+    <div class="kpi red"><div class="num" id="kPending">-</div><div class="lab">待审核申报</div></div>
+  </div>
+
+  <main>
+    <div class="col">
+      <div class="card"><h3>综测成绩分布<span class="tail" id="distTail"></span></h3><div class="chart" id="chDist"></div></div>
+      <div class="card"><h3>各年级平均分对比<span class="tail">综测总分</span></h3><div class="chart" id="chGrade"></div></div>
+    </div>
+    <div class="col mid">
+      <div class="card">
+        <h3>五维评分雷达 · 维度占比<span class="tail" id="dimTail"></span></h3>
+        <div style="flex:1;display:flex;gap:10px;min-height:0">
+          <div class="chart" style="flex:1.2" id="chRadar"></div>
+          <div style="flex:1;display:flex;flex-direction:column;min-height:0">
+            <div class="chart" style="flex:1.4" id="chDonut"></div>
+            <div class="legend" id="donutLegend"></div>
+          </div>
+        </div>
+      </div>
+      <div class="card"><h3>综测排名 TOP10<span class="tail" id="topTail"></span></h3><div class="ranklist" id="topList"></div></div>
+    </div>
+    <div class="col">
+      <div class="card"><h3>加分申报趋势（按月）<span class="tail" id="trendTail"></span></h3>
+        <div class="chart" id="chTrend"></div>
+        <div class="legend" style="margin-top:4px">
+          <span><i style="background:var(--cyan)"></i>提交</span>
+          <span><i style="background:var(--green)"></i>通过</span>
+          <span><i style="background:var(--red)"></i>驳回</span>
+        </div>
+      </div>
+      <div class="card"><h3>异常与预警<span class="tail" id="alertTail"></span></h3><div class="alerts" id="alertList"></div></div>
+    </div>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script>
+const API = window.API_BASE || '';
+let TOKEN = '';
+let DATA = null;
+let countdown = 60;
+const REFRESH_SEC = 60;
+
+/* ============ 工具 ============ */
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function toast(msg,err){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.toggle('err',!!err);t.classList.add('show');
+  clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),2600);
+}
+function fmt1(v){return Math.round((Number(v)||0)*10)/10}
+function svgEl(tag,attrs,children){
+  const ns='http://www.w3.org/2000/svg';
+  const el=document.createElementNS(ns,tag);
+  for(const k in attrs)el.setAttribute(k,attrs[k]);
+  (children||[]).forEach(c=>el.appendChild(c));
+  return el;
+}
+function svgText(x,y,str,attrs){
+  const t=svgEl('text',Object.assign({x,y},attrs||{}));
+  t.textContent=str;return t;
+}
+
+/* ============ 时钟 ============ */
+function tickClock(){
+  const d=new Date();
+  const p=v=>String(v).padStart(2,'0');
+  document.getElementById('clock').textContent=p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());
+  const wd='日一二三四五六'[d.getDay()];
+  document.getElementById('clockDate').textContent=d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' 星期'+wd;
+}
+setInterval(tickClock,1000);tickClock();
+
+/* ============ 大屏等比缩放（设计稿 1920×1080） ============ */
+function fitScreen(){
+  const w=window.innerWidth,h=window.innerHeight,stage=document.getElementById('stage');
+  const small=w<1024||h<620;
+  document.body.classList.toggle('fluid',small);
+  if(small){stage.style.transform='';return;}
+  const s=Math.min(w/1920,h/1080);
+  stage.style.transform='translate(-50%,-50%) scale('+s+')';
+}
+window.addEventListener('resize',fitScreen);fitScreen();
+
+/* ============ 会话守卫 ============ */
+(function(){
+  const s=window.ZCAuth&&window.ZCAuth.readSession();
+  if(!s){location.href='index.html';return;}
+  if(s.user.role!=='admin'){location.href=window.ZCAuth.home(s.user.role);return;}
+  TOKEN=s.token;
+})();
+
+/* ============ 筛选器 ============ */
+function fillSelect(id,items,allLabel,cur){
+  const sel=document.getElementById(id);
+  sel.innerHTML='<option value="">'+allLabel+'</option>'+items.map(v=>'<option value="'+esc(v)+'"'+(String(v)===cur?' selected':'')+'>'+esc(v)+'</option>').join('');
+}
+function termOptions(){
+  const d=new Date(),y=d.getFullYear(),m=d.getMonth()+1;
+  const y1=m>=9?y:y-1,y2=y1+1;
+  return [(y1)+'-'+(y2)+'-1',(y1)+'-'+(y2)+'-2',(y1-1)+'-'+y1+'-1',(y1-1)+'-'+y1+'-2'];
+}
+function termLabel(t){
+  const m=t.match(/^(\d{4})-(\d{4})-(\d)$/);
+  return m?(m[1]+'-'+m[2]+' 学年 第'+(m[3]==='1'?'一':'二')+'学期'):t;
+}
+function filterParams(){
+  const p=new URLSearchParams();
+  ['term','grade','major','bj','status'].forEach(k=>{
+    const id={term:'fTerm',grade:'fGrade',major:'fMajor',bj:'fClass',status:'fStatus'}[k];
+    const v=document.getElementById(id).value;
+    if(v)p.set(k,v);
+  });
+  return p.toString();
+}
+['fTerm','fGrade','fMajor','fClass','fStatus'].forEach(id=>{
+  document.getElementById(id).addEventListener('change',()=>{countdown=REFRESH_SEC;load();});
+});
+
+/* ============ 数据加载 ============ */
+async function load(){
+  try{
+    const resp=await fetch(API+'/api/admin/dashboard?'+filterParams(),{headers:{'Authorization':'Bearer '+TOKEN}});
+    const r=await resp.json();
+    if(r.code!==0){toast(r.msg||'加载失败',true);return;}
+    DATA=r.data;
+    renderFilters();renderKpis();renderAll();
+    countdown=REFRESH_SEC;
+  }catch(e){toast('网络异常：'+e.message,true);}
+}
+
+function renderFilters(){
+  const o=DATA.options||{};
+  const cur={grade:document.getElementById('fGrade').value,major:document.getElementById('fMajor').value,
+    bj:document.getElementById('fClass').value,status:document.getElementById('fStatus').value};
+  fillSelect('fTerm',termOptions().map(termLabel),'全部学期',document.getElementById('fTerm').value);
+  // 学期选项值为真实编码，label 为中文：重写
+  const fTerm=document.getElementById('fTerm');
+  fTerm.innerHTML='<option value="">全部学期</option>'+termOptions().map(t=>
+    '<option value="'+t+'"'+(fTerm.value===t?' selected':'')+'>'+esc(termLabel(t))+'</option>').join('');
+  fillSelect('fGrade',o.grades||[],'全部年级',cur.grade);
+  fillSelect('fMajor',o.majors||[],'全部专业',cur.major);
+  fillSelect('fClass',o.classes||[],'全部班级',cur.bj);
+  fillSelect('fStatus',o.statuses||[],'全部学籍',cur.status);
+}
+
+/* ============ KPI ============ */
+function renderKpis(){
+  const s=DATA.stats;
+  document.getElementById('kStudents').textContent=s.students;
+  document.getElementById('kAvg').innerHTML=fmt1(s.avgTotal)+'<small> 分</small>';
+  document.getElementById('kMax').innerHTML=fmt1(s.maxTotal)+'<small> 分</small>';
+  document.getElementById('kPass').innerHTML=fmt1(s.passRate)+'<small> %</small>';
+  document.getElementById('kExcellent').textContent=s.excellent;
+  document.getElementById('kClasses').innerHTML=s.classes+'<small> / '+s.majors+'</small>';
+  document.getElementById('kPending').textContent=s.pendingApps;
+}
+
+/* ============ 图表：纵向柱状 ============ */
+function vBars(el,data,color){
+  el.innerHTML='';
+  const w=el.clientWidth||400,h=el.clientHeight||220;
+  const padL=34,padB=34,padT=16,padR=8;
+  const iw=w-padL-padR,ih=h-padT-padB;
+  const max=Math.max(1,...data.map(d=>d.value));
+  const svg=svgEl('svg',{width:'100%',height:'100%',viewBox:'0 0 '+w+' '+h,preserveAspectRatio:'none'});
+  // 网格与 y 轴
+  for(let i=0;i<=4;i++){
+    const y=padT+ih*i/4;
+    svg.appendChild(svgEl('line',{x1:padL,y1:y,x2:w-padR,y2:y,stroke:'rgba(84,140,220,.16)','stroke-width':1}));
+    svg.appendChild(svgText(padL-6,y+4,String(Math.round(max*(1-i/4))),{fill:'#6e86ac','font-size':10,'text-anchor':'end'}));
+  }
+  const bw=iw/data.length;
+  data.forEach((d,i)=>{
+    const bh=d.value/max*ih;
+    const x=padL+bw*i+bw*0.18,b=padT+ih;
+    const g=svgEl('linearGradient',{id:'g'+i+i+'_'+Math.round(d.value),x1:0,y1:0,x2:0,y2:1});
+    const c=color||'#3fd2ff';
+    g.appendChild(svgEl('stop',{offset:'0%','stop-color':c}));
+    g.appendChild(svgEl('stop',{offset:'100%','stop-color':'rgba(79,140,255,.25)'}));
+    const defs=svgEl('defs');defs.appendChild(g);svg.appendChild(defs);
+    const rect=svgEl('rect',{x,y:b-bh,width:bw*0.64,height:Math.max(bh,1),rx:3,fill:'url(#g'+i+i+'_'+Math.round(d.value)+')'});
+    svg.appendChild(rect);
+    svg.appendChild(svgText(x+bw*0.32,b-bh-5,String(d.value),{fill:'#e8f1ff','font-size':11,'text-anchor':'middle','font-weight':600}));
+    svg.appendChild(svgText(padL+bw*i+bw/2,b+16,d.label,{fill:'#9fb6d8','font-size':10.5,'text-anchor':'middle'}));
+  });
+  svg.appendChild(svgEl('line',{x1:padL,y1:padT+ih,x2:w-padR,y2:padT+ih,stroke:'rgba(84,140,220,.45)','stroke-width':1}));
+  el.appendChild(svg);
+}
+
+/* ============ 图表：横向条形（排行） ============ */
+function hBars(el,data,color){
+  el.innerHTML='';
+  const w=el.clientWidth||400,rowH=data.length?Math.min(30,(el.clientHeight||220)/data.length):26;
+  const h=Math.max(data.length*rowH+8,40);
+  const max=Math.max(0.01,...data.map(d=>d.value));
+  const svg=svgEl('svg',{width:'100%',height:h,viewBox:'0 0 '+w+' '+h});
+  const labW=Math.min(w*0.42,230);
+  data.forEach((d,i)=>{
+    const y=i*rowH+rowH/2;
+    const tw=(w-labW-56)*Math.max(0,Math.min(1,d.value/max));
+    svg.appendChild(svgText(0,y+4,d.label,{fill:'#e8f1ff','font-size':11.5}));
+    svg.appendChild(svgEl('rect',{x:labW,y:y-5,width:w-labW-56,height:10,rx:5,fill:'rgba(84,140,220,.15)'}));
+    svg.appendChild(svgEl('rect',{x:labW,y:y-5,width:Math.max(tw,2),height:10,rx:5,fill:color||'url(#hb)'}));
+    const defs=svgEl('defs');
+    const g=svgEl('linearGradient',{id:'hb',x1:0,y1:0,x2:1,y2:0});
+    g.appendChild(svgEl('stop',{offset:'0%','stop-color':'#4f8cff'}));
+    g.appendChild(svgEl('stop',{offset:'100%','stop-color':'#3fd2ff'}));
+    defs.appendChild(g);svg.appendChild(defs);
+    const t=svgText(labW+tw+8,y+4,d.extra||String(d.value),{fill:'#ffc957','font-size':11.5,'font-weight':600});
+    svg.appendChild(t);
+  });
+  el.appendChild(svg);
+}
+
+/* ============ 图表：雷达 ============ */
+function radar(el,dims){
+  el.innerHTML='';
+  const w=el.clientWidth||300,h=el.clientHeight||240;
+  const cx=w*0.5,cy=h*0.52,R=Math.min(w,h)*0.36;
+  const svg=svgEl('svg',{width:'100%',height:'100%',viewBox:'0 0 '+w+' '+h});
+  const N=dims.length,ang=i=>-Math.PI/2+i*2*Math.PI/N;
+  const pt=(i,r)=>[cx+Math.cos(ang(i))*r,cy+Math.sin(ang(i))*r];
+  [1,0.75,0.5,0.25].forEach(f=>{
+    const pts=dims.map((_,i)=>pt(i,R*f).join(',')).join(' ');
+    svg.appendChild(svgEl('polygon',{points:pts,fill:f===1?'rgba(47,110,220,.06)':'none',stroke:'rgba(84,140,220,.3)','stroke-width':1}));
+  });
+  dims.forEach((d,i)=>{
+    const [x,y]=pt(i,R);
+    svg.appendChild(svgEl('line',{x1:cx,y1:cy,x2:x,y2:y,stroke:'rgba(84,140,220,.3)','stroke-width':1}));
+    const [lx,ly]=pt(i,R+24);
+    svg.appendChild(svgText(lx,ly+4,d.label,{fill:'#e8f1ff','font-size':12.5,'text-anchor':'middle','font-weight':600}));
+    svg.appendChild(svgText(lx,ly+18,d.value+' 分',{fill:'#3fd2ff','font-size':11,'text-anchor':'middle'}));
+  });
+  const dataPts=dims.map((d,i)=>pt(i,R*Math.max(0.04,Math.min(1,d.value/100))).join(',')).join(' ');
+  svg.appendChild(svgEl('polygon',{points:dataPts,fill:'rgba(63,210,255,.25)',stroke:'#3fd2ff','stroke-width':2}));
+  dims.forEach((d,i)=>{
+    const [x,y]=pt(i,R*Math.max(0.04,Math.min(1,d.value/100)));
+    svg.appendChild(svgEl('circle',{cx:x,cy:y,r:3.5,fill:'#3fd2ff'}));
+  });
+  el.appendChild(svg);
+}
+
+/* ============ 图表：环形占比 ============ */
+function donut(el,parts,centerLabel){
+  el.innerHTML='';
+  const w=el.clientWidth||220,h=el.clientHeight||200;
+  const cx=w/2,cy=h/2,r=Math.min(w,h)*0.36,sw=r*0.42;
+  const svg=svgEl('svg',{width:'100%',height:'100%',viewBox:'0 0 '+w+' '+h});
+  const total=parts.reduce((a,b)=>a+b.pct,0)||1;
+  const C=2*Math.PI*r;
+  let acc=0;
+  parts.forEach(p=>{
+    const frac=p.pct/total,len=frac*C;
+    svg.appendChild(svgEl('circle',{cx,cy,r,fill:'none',stroke:p.color,'stroke-width':sw,
+      'stroke-dasharray':(len-1.5)+' '+(C-len+1.5),'stroke-dashoffset':-acc,'stroke-linecap':'butt',
+      transform:'rotate(-90 '+cx+' '+cy+')'}));
+    acc+=len;
+  });
+  svg.appendChild(svgText(cx,cy-6,centerLabel,{fill:'#e8f1ff','font-size':13,'text-anchor':'middle','font-weight':700}));
+  svg.appendChild(svgText(cx,cy+14,'贡献占比',{fill:'#6e86ac','font-size':10.5,'text-anchor':'middle'}));
+  el.appendChild(svg);
+}
+
+/* ============ 图表：折线 ============ */
+function lineChart(el,labels,series){
+  el.innerHTML='';
+  const w=el.clientWidth||400,h=el.clientHeight||200;
+  const padL=30,padB=20,padT=10,padR=8;
+  const iw=w-padL-padR,ih=h-padT-padB;
+  const max=Math.max(1,...series.flatMap(s=>s.points));
+  const svg=svgEl('svg',{width:'100%',height:'100%',viewBox:'0 0 '+w+' '+h,preserveAspectRatio:'none'});
+  for(let i=0;i<=4;i++){
+    const y=padT+ih*i/4;
+    svg.appendChild(svgEl('line',{x1:padL,y1:y,x2:w-padR,y2:y,stroke:'rgba(84,140,220,.16)','stroke-width':1}));
+    svg.appendChild(svgText(padL-5,y+4,String(Math.round(max*(1-i/4))),{fill:'#6e86ac','font-size':9.5,'text-anchor':'end'}));
+  }
+  const X=i=>padL+(labels.length<2?iw/2:iw*i/(labels.length-1));
+  const Y=v=>padT+ih*(1-v/max);
+  series.forEach(s=>{
+    const pts=s.points.map((v,i)=>X(i)+','+Y(v)).join(' ');
+    svg.appendChild(svgEl('polyline',{points:pts,fill:'none',stroke:s.color,'stroke-width':2,'stroke-linejoin':'round'}));
+    s.points.forEach((v,i)=>svg.appendChild(svgEl('circle',{cx:X(i),cy:Y(v),r:2.6,fill:s.color})));
+  });
+  labels.forEach((lb,i)=>{
+    if(labels.length>8&&i%2===1)return;
+    svg.appendChild(svgText(X(i),h-6,lb.slice(5),{fill:'#9fb6d8','font-size':9.5,'text-anchor':'middle'}));
+  });
+  el.appendChild(svg);
+}
+
+/* ============ 渲染各图 ============ */
+function renderAll(){
+  // 分布
+  const total=DATA.stats.students;
+  document.getElementById('distTail').textContent='共 '+total+' 人';
+  vBars(document.getElementById('chDist'),DATA.distribution.map(d=>({label:d.label,value:d.count})),'#3fd2ff');
+  // 年级
+  hBars(document.getElementById('chGrade'),(DATA.gradeAvg||[]).map(g=>({label:g.grade+' 级（'+g.count+'人）',value:g.avg,extra:g.avg+' 分'})));
+  // 雷达 + 环图
+  document.getElementById('dimTail').textContent='平均分 / 权重';
+  const dims=DATA.dimensions.map(d=>({label:d.label,value:d.avg}));
+  radar(document.getElementById('chRadar'),dims);
+  const colors=['#3fd2ff','#ffc957','#3ce39b','#b48cff','#ff8f5f'];
+  const parts=DATA.dimensions.map((d,i)=>({label:d.label,pct:Math.max(d.contribPct,0),color:colors[i]}));
+  donut(document.getElementById('chDonut'),parts,fmt1(DATA.stats.avgTotal)+' 分');
+  document.getElementById('donutLegend').innerHTML=DATA.dimensions.map((d,i)=>
+    '<span><i style="background:'+colors[i]+'"></i>'+d.label+' '+(d.contribPct||0)+'%</span>').join('');
+  // TOP10
+  document.getElementById('topTail').textContent='按综测总分';
+  const list=document.getElementById('topList');
+  if(!(DATA.topStudents||[]).length){list.innerHTML='<div class="none">暂无学生数据</div>';}
+  else{
+    const max=DATA.topStudents[0].total||1;
+    list.innerHTML=DATA.topStudents.map(s=>
+      '<div class="rk"><div class="no">'+s.rank+'</div><div class="who"><b>'+esc(s.xm)+'</b><span>'+esc(s.xh)+' · '+esc(s.bj||'未分班')+'</span></div>'+
+      '<div class="bar"><i style="width:'+Math.max(4,s.total/max*100)+'%"></i></div><div class="val">'+s.total+'</div></div>').join('');
+  }
+  // 趋势
+  const t=DATA.trend||[];
+  document.getElementById('trendTail').textContent=t.length?('区间 '+t[0].month+' ~ '+t[t.length-1].month+' · 通过 '+DATA.stats.approvedTerm+' / 驳回 '+DATA.stats.rejectedTerm):'';
+  lineChart(document.getElementById('chTrend'),t.map(x=>x.month),[
+    {name:'提交',color:'#3fd2ff',points:t.map(x=>x.submitted)},
+    {name:'通过',color:'#3ce39b',points:t.map(x=>x.approved)},
+    {name:'驳回',color:'#ff6b7a',points:t.map(x=>x.rejected)},
+  ]);
+  // 预警
+  const alerts=DATA.alerts||[];
+  document.getElementById('alertTail').textContent=alerts.length?alerts.length+' 项':'';
+  const al=document.getElementById('alertList');
+  if(!alerts.length){al.innerHTML='<div class="none">暂无异常，各项指标运行正常 ✓</div>';}
+  else{
+    al.innerHTML=alerts.map(a=>
+      '<div class="al '+(a.level==='high'?'high':'')+'"><div class="t">'+(a.level==='high'?'⛔':'⚠️')+' '+esc(a.title)+
+      '<span class="lv">'+(a.level==='high'?'高':'中')+'</span></div>'+
+      ((a.items||[]).length?'<ul>'+a.items.map(i=>'<li>'+esc(i.text)+'</li>').join('')+'</ul>':'')+'</div>').join('');
+  }
+}
+
+/* ============ 手动刷新 + 自动刷新倒计时 ============ */
+document.getElementById('btnRefresh').addEventListener('click',()=>{countdown=REFRESH_SEC;load();});
+document.getElementById('btnBack').addEventListener('click',()=>{location.href='admin.html';});
+setInterval(()=>{
+  countdown--;
+  if(countdown<=0){countdown=REFRESH_SEC;load();}
+  document.getElementById('cd').textContent=Math.max(countdown,0);
+},1000);
+// 窗口尺寸变化后重绘 SVG（宽度按容器计算）
+window.addEventListener('resize',()=>{if(DATA)renderAll();});
+
+load();
+setInterval(load,REFRESH_SEC*1000);
+</script>
+</body>
+</html>

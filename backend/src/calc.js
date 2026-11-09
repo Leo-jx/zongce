@@ -81,3 +81,44 @@ export const SCORE_FIELDS = [
   { item: 'meiyu_reward', column: 'meiyu_jiangli' },
   { item: 'laoyu_reward', column: 'laoyu_shehui' },
 ];
+
+/**
+ * 数据库扁平行（students 表）→ 五维得分与综测总分。
+ * 与前端 frontend/score.js 的 calcZongce 口径逐行对应（德×20% + 智×50% + 体×10% + 美×10% + 劳×10% + 扣分），
+ * 供后端统计（如数据大屏）直接使用，避免前端后端各算一套。
+ */
+function jsNum(v) { const n = Number(v); return isNaN(n) ? 0 : n; }
+function jsArr(v) {
+  try {
+    const p = typeof v === 'string' ? JSON.parse(v || '[]') : v;
+    return Array.isArray(p) ? p : [];
+  } catch { return []; }
+}
+
+export function rowScores(row) {
+  const deyu = 80 + Math.min(Math.max(
+    (jsNum(row.deyu_sixiang) || 0) + (jsNum(row.deyu_biaozhang) || 0)
+    + Math.min(jsArr(row.deyu_ganbu).reduce((s, v) => s + jsNum(v), 0), 10)
+    + Math.min(jsArr(row.deyu_rongyu).reduce((s, v) => s + jsNum(v), 0), 10)
+    + (jsNum(row.deyu_custom) || 0), 0), 20);
+
+  const zhiyuReward = Math.min(Math.max(
+    (jsNum(row.zhiyu_jingsai) || 0) + Math.min(jsArr(row.zhiyu_jineng).reduce((s, v) => s + jsNum(v), 0), 20)
+    + (jsNum(row.zhiyu_chuangye) || 0) + (jsNum(row.zhiyu_custom) || 0), 0), 20);
+  const zhiyu = Math.min((jsNum(row.zhuanye_score) || 0) + zhiyuReward, 100);
+
+  const tiyu = Math.min((jsNum(row.tiyu_chengji) || 0) + (jsNum(row.tiyu_tice) || 0)
+    + Math.min(Math.max((jsNum(row.tiyu_jiangli) || 0) + (jsNum(row.tiyu_custom) || 0), 0), 20), 100);
+
+  const meiyu = Math.min(80 + Math.min(Math.max((jsNum(row.meiyu_jiangli) || 0) + (jsNum(row.meiyu_custom) || 0), 0), 20), 100);
+
+  const laoyu = Math.min(80 + Math.min(Math.max(
+    Math.min(jsNum(row.laoyu_zhiyuanCishu) || 0, 10) + (jsNum(row.laoyu_xianxue) || 0) * 5
+    + (jsNum(row.laoyu_qinshi) || 0) + (jsNum(row.laoyu_shehui) || 0) + (jsNum(row.laoyu_custom) || 0), 0), 20), 100);
+
+  const koufen = -((jsNum(row.koufen_chufen) || 0) + (jsNum(row.koufen_richang) || 0));
+
+  const zongce = Math.max(0, deyu * 0.20 + zhiyu * 0.50 + tiyu * 0.10 + meiyu * 0.10 + laoyu * 0.10 + koufen);
+
+  return { deyu, zhiyu, tiyu, meiyu, laoyu, koufen, zongce };
+}
