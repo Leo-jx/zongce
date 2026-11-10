@@ -2155,6 +2155,27 @@ document.querySelectorAll('#mainTabs .tabbtn').forEach(btn=>{
   });
 });
 
+// ============ 填报权限开关横幅：关闭的写操作在页顶提示（操作仍以后端校验为准） ============
+async function checkSwitchBanner(){
+  try{
+    const resp=await fetch(API+'/api/teacher/switches',{headers:{'Authorization':'Bearer '+TOKEN}});
+    const r=await resp.json();
+    if(r.code!==0)return;
+    const off=(r.data.items||[]).filter(x=>!x.enabled);
+    let el=document.getElementById('swBanner');
+    if(off.length){
+      if(!el){
+        el=document.createElement('div');
+        el.id='swBanner';
+        document.querySelector('.topbar').insertAdjacentElement('afterend',el);
+      }
+      el.style.cssText='margin:12px 0 0;padding:10px 14px;border-radius:10px;font-size:13px;line-height:1.6;background:#fdeceb;color:#b3362f;border:1px solid #f3c9c6';
+      el.innerHTML='🔒 <b>管理员已暂停部分功能：</b>'+off.map(x=>'「'+x.label+'」').join('、')
+        +' 相关操作暂不可用（提交后端将拒绝）。查询、导出等只读功能不受影响，功能恢复后无需重复操作即可继续。';
+    }else if(el){el.remove();}
+  }catch(e){/* 状态获取失败不阻断页面 */}
+}
+
 // 会话由统一登录页写入，缺失或角色不符时自动跳转
 (function(){
   const session=ZCAuth.requireRole(['teacher','admin']);
@@ -2162,6 +2183,7 @@ document.querySelectorAll('#mainTabs .tabbtn').forEach(btn=>{
     TOKEN=session.token;
     USER=session.user;
     enterMain();
+    checkSwitchBanner();
     // 教学计划库为全院共享：先把旧浏览器缓存一次性同步到数据库，再加载共享库
     (async()=>{
       await migrateLocalPlans();

@@ -7,6 +7,7 @@
  * KV 限制：单值上限 25 MiB，故这里对单文件额外限制 10 MB（base64 后约 13.4 MB）。
  */
 import { ok, fail, json, corsHeaders } from '../http.js';
+import { gate } from '../switches.js';
 
 const FILE_RE = /^\/api\/files\/(.+)$/;
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -37,6 +38,10 @@ export async function handleUpload(path, method, ctx) {
 
   const kv = env.FILES;
   if (!kv) return fail('未绑定 KV 命名空间 FILES，请检查 wrangler.toml 的 [[kv_namespaces]] 配置', 500, env);
+
+  // 填报权限开关：学生上传证明随「学生填报申请」一并禁用（管理员不受限）
+  const swDenied = await gate(ctx, 'apply_submit', '上传证明材料');
+  if (swDenied) return swDenied;
 
   const formData = await request.formData();
   const applicationId = formData.get('application_id') ? Number(formData.get('application_id')) : null;

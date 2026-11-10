@@ -95,6 +95,7 @@ table.grid tbody tr:hover{background:#f7fafd}
     <button class="tabbtn" data-tab="accounts">账号管理</button>
     <button class="tabbtn" data-tab="attendance">考勤查询</button>
     <button class="tabbtn" data-tab="windows">填报窗口</button>
+    <button class="tabbtn" data-tab="switches">填报权限</button>
   </div>
 
   <div id="tab-overview">
@@ -236,6 +237,22 @@ table.grid tbody tr:hover{background:#f7fafd}
     <div class="card">
       <h3>窗口设置列表<span style="font-size:12px;color:var(--ink-3);font-weight:400;margin-left:8px" id="winSummary"></span></h3>
       <div class="tblwrap"><table class="grid" id="winTable"></table></div>
+    </div>
+  </div>
+
+  <div id="tab-switches" class="hidden">
+    <div class="card">
+      <h3>一键操作</h3>
+      <div class="formrow">
+        <button class="btn primary" id="btnSwAllOn">🔓 一键全部开启</button>
+        <button class="btn danger" id="btnSwAllOff">🔒 一键全部关闭</button>
+        <span class="hint" style="margin:0" id="swUpdated"></span>
+      </div>
+      <div class="hint">一键关闭将同时停用「学生填报申请、教师审核、数据编辑维护、考勤登记」四项写操作；查询、导出等只读功能不受影响；超级管理员不受限；再次一键开启后流程无缝恢复。与「填报窗口」的时间限制 <b>叠加生效</b>（两道闸门均放行才可操作）。</div>
+    </div>
+    <div class="card">
+      <h3>权限项明细</h3>
+      <div class="tblwrap"><table class="grid" id="swTable"></table></div>
     </div>
   </div>
 </div>
@@ -736,7 +753,7 @@ document.querySelectorAll('#mainTabs .tabbtn').forEach(btn=>{
     document.querySelectorAll('#mainTabs .tabbtn').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
     const t=btn.dataset.tab;
-    ['overview','perms','classes','teachers','students','accounts','attendance','windows'].forEach(x=>{
+    ['overview','perms','classes','teachers','students','accounts','attendance','windows','switches'].forEach(x=>{
       document.getElementById('tab-'+x).classList.toggle('hidden',x!==t);
     });
     if(t==='perms')loadPerms();
@@ -747,6 +764,7 @@ document.querySelectorAll('#mainTabs .tabbtn').forEach(btn=>{
     if(t==='attendance')loadAttendance();
     if(t==='overview')loadOverview();
     if(t==='windows')loadWindows();
+    if(t==='switches')loadSwitches();
   });
 });
 
@@ -859,6 +877,55 @@ document.getElementById('btnWinSave').addEventListener('click',async()=>{
   resetWinForm();loadWindows();
 });
 document.getElementById('btnWinCancel').addEventListener('click',resetWinForm);
+
+/* ============ 填报权限开关 ============ */
+const OFF_COUNTS={apply_submit:'学生提交申请与上传证明将被拒绝',apply_review:'教师审核（通过/驳回）将被拒绝',
+  apply_edit:'学生编辑、批量操作、班级管理、学生导入将被拒绝',attendance_write:'考勤登记与修改将被拒绝'};
+
+async function loadSwitches(){
+  const r=await apiGet('/api/admin/switches');
+  if(r.code!==0){toast(r.msg||'加载失败','err');return;}
+  const items=r.data.items||[];
+  const off=items.filter(x=>!x.enabled);
+  document.getElementById('swUpdated').textContent=off.length
+    ?('当前：'+off.length+' 项已关闭')
+    :'当前：全部开启';
+  const tb=document.getElementById('swTable');
+  tb.innerHTML='<thead><tr><th>权限项</th><th>影响范围</th><th>具体内容</th><th>状态</th><th>最近变更</th><th>操作</th></tr></thead><tbody>'
+    +items.map(x=>'<tr>'
+      +'<td><b>'+esc(x.label)+'</b><br><code style="font-size:11px;color:var(--ink-3)">'+esc(x.key)+'</code></td>'
+      +'<td>'+esc(x.scope)+'</td>'
+      +'<td style="max-width:320px">'+esc(x.desc)+'</td>'
+      +'<td>'+(x.enabled?'<span class="tag on">开启</span>':'<span class="tag off">关闭</span>')+'</td>'
+      +'<td style="font-size:12px;color:var(--ink-3)">'+(x.updated_at?esc(x.updated_by)+'<br>'+esc(x.updated_at):'默认值')+'</td>'
+      +'<td><button class="btn sm '+(x.enabled?'danger':'primary')+'" data-sw="'+x.key+'" data-en="'+(x.enabled?0:1)+'">'+(x.enabled?'关闭':'开启')+'</button></td>'
+      +'</tr>').join('')+'</tbody>';
+  tb.querySelectorAll('[data-sw]').forEach(b=>b.addEventListener('click',async()=>{
+    const item=items.find(x=>x.key===b.dataset.sw);
+    const on=b.dataset.en==='1';
+    const name=item?item.label:b.dataset.sw;
+    const okgo=confirm((on?'确认开启':'确认关闭')+'「'+name+'」？\n\n'
+      +(on?'开启后对应功能立即恢复，此前被拒绝的操作需由用户重新进行。'
+          :'关闭后：'+(OFF_COUNTS[b.dataset.sw]||'对应写操作将被拒绝')+'\n查询与导出不受影响；已有数据完整保留；超级管理员不受限。'));
+    if(!okgo)return;
+    const r2=await apiPut('/api/admin/switches/'+b.dataset.sw,{enabled:on});
+    toast(r2.code===0?('「'+name+'」已'+(on?'开启':'关闭')):(r2.msg||'操作失败'),r2.code===0?'ok':'err');
+    loadSwitches();
+  }));
+}
+
+document.getElementById('btnSwAllOn').addEventListener('click',async()=>{
+  if(!confirm('确认【一键全部开启】？\n\n将开启全部 4 项权限：学生填报申请、教师审核申请、数据编辑维护、考勤登记。\n各功能立即恢复，此前因关闭被拒绝的操作需由用户重新进行。'))return;
+  const r=await apiPost('/api/admin/switches/all',{enabled:true});
+  toast(r.code===0?'已一键全部开启':(r.msg||'操作失败'),r.code===0?'ok':'err');
+  loadSwitches();
+});
+document.getElementById('btnSwAllOff').addEventListener('click',async()=>{
+  if(!confirm('确认【一键全部关闭】？\n\n将同时关闭全部 4 项权限：\n· 学生填报申请（提交申请、上传证明被拒绝）\n· 教师审核申请（通过/驳回被拒绝）\n· 数据编辑维护（学生编辑、批量操作、班级管理、导入被拒绝）\n· 考勤登记（登记与修改被拒绝）\n\n查询与导出等只读功能不受影响；已提交申请与审核记录完整保留；超级管理员不受限。\n恢复时再次点击「一键全部开启」即可。'))return;
+  const r=await apiPost('/api/admin/switches/all',{enabled:false});
+  toast(r.code===0?'已一键全部关闭':(r.msg||'操作失败'),r.code===0?'ok':'err');
+  loadSwitches();
+});
 
 // 会话由统一登录页写入，缺失或角色不符时自动跳转
 (function(){

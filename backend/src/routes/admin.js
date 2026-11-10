@@ -10,6 +10,10 @@ import { ok, fail } from '../http.js';
 import { now } from '../db.js';
 import { rowScores } from '../calc.js';
 import { bjNow, windowTermLabel } from '../windows.js';
+import { SWITCH_DEFS, getSwitches, setSwitch, setAllSwitches } from '../switches.js';
+
+const SWITCH_PATH = '/api/admin/switches';
+const SWITCH_RE = /^\/api\/admin\/switches\/([a-z_]+)$/;
 import { requirePerm, PERMISSION_DEFS, PERMISSION_KEYS, ROLE_LABELS, ROLE_DEFAULTS, loadPermissions, applyPermissionOverrides } from '../rbac.js';
 
 const PERM_PATH = '/api/admin/permissions';
@@ -415,6 +419,33 @@ export async function handleAdmin(path, method, ctx) {
     const old = await db.queryOne('SELECT id FROM apply_windows WHERE id = ?', [wm[1]]);
     if (!old) return fail('窗口设置不存在', 404, env);
     await db.run('DELETE FROM apply_windows WHERE id = ?', [wm[1]]);
+    return ok(null, env);
+  }
+
+  // ===================== 填报权限开关（一键开启 / 关闭） =====================
+
+  // 列表：权限项定义 + 当前状态 + 最近变更
+  if (path === SWITCH_PATH && method === 'GET') {
+    const denied = requirePerm(ctx, 'switch:manage'); if (denied) return denied;
+    const map = await getSwitches(db);
+    return ok({ items: SWITCH_DEFS.map(d => map[d.key]) }, env);
+  }
+
+  // 单项切换：PUT /api/admin/switches/:key {enabled}
+  const sm = path.match(SWITCH_RE);
+  if (sm && method === 'PUT') {
+    const denied = requirePerm(ctx, 'switch:manage'); if (denied) return denied;
+    if (!SWITCH_DEFS.some(d => d.key === sm[1])) return fail('未知的权限项：' + sm[1], 400, env);
+    const d = await request.json();
+    await setSwitch(db, sm[1], !!d.enabled, ctx.user.account);
+    return ok(null, env);
+  }
+
+  // 一键全开 / 全关：POST /api/admin/switches/all {enabled}
+  if (path === SWITCH_PATH + '/all' && method === 'POST') {
+    const denied = requirePerm(ctx, 'switch:manage'); if (denied) return denied;
+    const d = await request.json();
+    await setAllSwitches(db, !!d.enabled, ctx.user.account);
     return ok(null, env);
   }
 

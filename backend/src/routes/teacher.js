@@ -10,6 +10,7 @@ import { now } from '../db.js';
 import { hashPassword } from '../auth.js';
 import { SCORE_FIELDS } from '../calc.js';
 import { requirePerm } from '../rbac.js';
+import { getSwitches, gate } from '../switches.js';
 
 const APPS_PATH = '/api/teacher/applications';
 const APP_RE = /^\/api\/teacher\/applications\/(\d+)$/;
@@ -304,6 +305,7 @@ export async function handleTeacher(path, method, ctx) {
 
   if (path === CLASSES_PATH && method === 'POST') {
     const denied = requirePerm(ctx, 'class:write'); if (denied) return denied;
+    const swDenied = await gate(ctx, 'apply_edit', '班级管理'); if (swDenied) return swDenied;
     const d = await request.json();
     if (!d.name) return fail('班级名称不能为空', 400, env);
     const teacherAccount = ctx.user.role === 'admin' && d.teacher_account ? d.teacher_account : ctx.user.account;
@@ -321,6 +323,7 @@ export async function handleTeacher(path, method, ctx) {
   const cm = path.match(CLASS_RE);
   if (cm && (method === 'PUT' || method === 'DELETE')) {
     const denied = requirePerm(ctx, 'class:write'); if (denied) return denied;
+    const swDenied = await gate(ctx, 'apply_edit', '班级管理'); if (swDenied) return swDenied;
     const { cls, error } = await assertOwnClass(ctx, cm[1]);
     if (error) return error;
 
@@ -358,6 +361,7 @@ export async function handleTeacher(path, method, ctx) {
   // ===================== 学生导入 =====================
   if (path === '/api/teacher/import' && method === 'POST') {
     const denied = requirePerm(ctx, 'student:write'); if (denied) return denied;
+    const swDenied = await gate(ctx, 'apply_edit', '学生导入'); if (swDenied) return swDenied;
     const d = await request.json();
 
     // JSON 全量导入（支持「导出数据备份」格式还原）
@@ -556,6 +560,7 @@ export async function handleTeacher(path, method, ctx) {
 
   if (path === STUDENTS_PATH && method === 'POST') {
     const denied = requirePerm(ctx, 'student:write'); if (denied) return denied;
+    const swDenied = await gate(ctx, 'apply_edit', '新增学生'); if (swDenied) return swDenied;
     const d = await request.json();
     if (!d.xh || !d.xm) return fail('学号和姓名必填', 400, env);
     if (await db.queryOne('SELECT id FROM students WHERE xh = ?', [d.xh])) return fail('学号已存在', 400, env);
@@ -586,6 +591,7 @@ export async function handleTeacher(path, method, ctx) {
   // 批量操作：多选学生删除 / 修改学籍状态 / 重置密码（同一条路径，按 action 区分）
   if (path === STUDENTS_PATH + '/batch' && method === 'POST') {
     const denied = requirePerm(ctx, 'student:write'); if (denied) return denied;
+    const swDenied = await gate(ctx, 'apply_edit', '批量操作'); if (swDenied) return swDenied;
     const d = await request.json();
     const ids = Array.isArray(d.ids) ? d.ids.map(Number).filter(n => !isNaN(n)) : [];
     if (!ids.length) return fail('请先选择学生', 400, env);
@@ -628,6 +634,7 @@ export async function handleTeacher(path, method, ctx) {
 
   if (sm && method === 'PUT') {
     const denied = requirePerm(ctx, 'student:write'); if (denied) return denied;
+    const swDenied = await gate(ctx, 'apply_edit', '编辑学生信息'); if (swDenied) return swDenied;
     const { stu, error } = await assertOwnStudent(ctx, sm[1]);
     if (error) return error;
 
@@ -668,6 +675,19 @@ export async function handleTeacher(path, method, ctx) {
   }
 
   // ===================== 考勤 =====================
+  // 教师端开关状态：前端据此显示横幅 / 禁用按钮（最终以后端校验为准）
+  if (path === '/api/teacher/switches' && method === 'GET') {
+    const map = await getSwitches(db);
+    return ok({
+      apply_review: map.apply_review.enabled,
+      apply_edit: map.apply_edit.enabled,
+      attendance_write: map.attendance_write.enabled,
+      items: ['apply_review', 'apply_edit', 'attendance_write'].map(k => ({
+        key: k, label: map[k].label, enabled: map[k].enabled, updated_by: map[k].updated_by, updated_at: map[k].updated_at,
+      })),
+    }, env);
+  }
+
   if (path === ATTENDANCE_PATH && method === 'GET') {
     const denied = requirePerm(ctx, 'attendance:read'); if (denied) return denied;
     const { date, from, to, class_id, xh } = Object.fromEntries(searchParams);
@@ -688,6 +708,7 @@ export async function handleTeacher(path, method, ctx) {
 
   if (path === ATTENDANCE_PATH && method === 'POST') {
     const denied = requirePerm(ctx, 'attendance:write'); if (denied) return denied;
+    const swDenied = await gate(ctx, 'attendance_write', '考勤登记'); if (swDenied) return swDenied;
     const d = await request.json();
     if (!d.date || !Array.isArray(d.records)) return fail('缺少日期或考勤明细', 400, env);
 
@@ -716,6 +737,7 @@ export async function handleTeacher(path, method, ctx) {
   const am = path.match(ATTENDANCE_RE);
   if (am && (method === 'PUT' || method === 'DELETE')) {
     const denied = requirePerm(ctx, 'attendance:write'); if (denied) return denied;
+    const swDenied = await gate(ctx, 'attendance_write', '考勤修改'); if (swDenied) return swDenied;
     const row = await db.queryOne(
       'SELECT a.*, s.fdy FROM attendance a JOIN students s ON a.student_id = s.id WHERE a.id = ?',
       [am[1]]
@@ -778,6 +800,7 @@ export async function handleTeacher(path, method, ctx) {
   const rm = path.match(REVIEW_RE);
   if (rm && method === 'PUT') {
     const denied = requirePerm(ctx, 'application:review'); if (denied) return denied;
+    const swDenied = await gate(ctx, 'apply_review', '审核申请'); if (swDenied) return swDenied;
     const appId = rm[1];
     const { action, reject_reason } = await request.json();
 
